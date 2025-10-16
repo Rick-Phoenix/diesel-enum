@@ -6,6 +6,10 @@ pub(crate) use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 use syn::{parse::Parse, parse_macro_input, Error, Expr, Ident, ItemEnum, Lit, Meta, Path, Token};
 
+fn default_skip_check() -> bool {
+  cfg!(feature = "default-skip-check")
+}
+
 macro_rules! error {
   ($span:expr, $error:expr) => {
     syn::Error::new($span, $error)
@@ -50,7 +54,11 @@ impl<'a> Parse for Attributes<'a> {
   fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
     let mut table: Option<String> = None;
     let mut column: Option<String> = None;
-    let mut conn: Option<Check> = None;
+    let mut conn: Option<Check> = if default_skip_check() {
+      Some(Check::Skip)
+    } else {
+      None
+    };
     let mut case: Option<Case> = None;
 
     let punctuated_args = syn::punctuated::Punctuated::<Meta, Token![,]>::parse_terminated(input)?;

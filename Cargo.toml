@@ -17,4 +17,6 @@ convert_case = "0.8"
 
 [lib]
 proc-macro = true
-required-features = []
+
+[features]
+default-skip-check = []
