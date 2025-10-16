@@ -201,7 +201,7 @@ pub fn diesel_sqlite_enum(attrs: TokenStream, input: TokenStream) -> TokenStream
   let enum_name = &ast.ident;
   let enum_name_str = enum_name.to_string();
 
-  let display_impl_body = if db_variants_case.is_none() {
+  let conversion_to_string = if db_variants_case.is_none() {
     traverse_enum(&variant_idents, |variant| {
       quote! {
         Self::#variant => stringify!(#variant).to_string()
@@ -222,7 +222,7 @@ pub fn diesel_sqlite_enum(attrs: TokenStream, input: TokenStream) -> TokenStream
     tokens
   };
 
-  let try_from_str_body = if db_variants_case.is_none() {
+  let conversion_from_str = if db_variants_case.is_none() {
     traverse_enum(&variant_idents, |variant| {
       quote! {
         stringify!(#variant) => Ok(Self::#variant)
@@ -321,7 +321,7 @@ pub fn diesel_sqlite_enum(attrs: TokenStream, input: TokenStream) -> TokenStream
         let value = <String as diesel::deserialize::FromSql<diesel::sql_types::Text, diesel::sqlite::Sqlite>>::from_sql(bytes)?;
 
         match value.as_str() {
-          #try_from_str_body
+          #conversion_from_str
           _ => Err(Box::from(format!("Unknown {}: {}", stringify!(#enum_name), value))),
         }
       }
@@ -330,7 +330,7 @@ pub fn diesel_sqlite_enum(attrs: TokenStream, input: TokenStream) -> TokenStream
     impl diesel::serialize::ToSql<diesel::sql_types::Text, diesel::sqlite::Sqlite> for #enum_name {
       fn to_sql<'b>(&'b self, out: &mut diesel::serialize::Output<'b, '_, diesel::sqlite::Sqlite>) -> diesel::serialize::Result {
         let value = match self {
-          #display_impl_body
+          #conversion_to_string
         };
 
         out.set_value(value);
