@@ -1,0 +1,19 @@
+[package]
+name = "diesel-sqlite-enum"
+publish = false
+version = "0.1.0"
+edition = "2024"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+proc-macro2 = "1"
+quote = "1"
+syn = { version = "2", features = ["extra-traits", "full"] }
+convert_case = "0.8"
+
+[lib]
+proc-macro = true
+required-features = []
