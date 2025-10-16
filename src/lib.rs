@@ -90,15 +90,15 @@ impl<'a> Parse for Attributes<'a> {
             }
 
             let case_value = match extract_string_lit(&value)?.as_str()  {
-          "snake_case" => Case::Snake,
-          "UPPER_SNAKE" => Case::UpperSnake,
-          "camelCase" => Case::Camel,
-          "PascalCase" => Case::Pascal,
-          "lowercase" => Case::Lower,
-          "UPPERCASE" => Case::Upper,
-          "kebab-case" => Case::Kebab,
-          _ => return Err(spanned_error!(value, "Invalid value for `case`. Allowed values are: [ snake_case, UPPER_SNAKE, camelCase, PascalCase, lowercase, UPPERCASE, kebab-case ]"))
-        };
+              "snake_case" => Case::Snake,
+              "UPPER_SNAKE" => Case::UpperSnake,
+              "camelCase" => Case::Camel,
+              "PascalCase" => Case::Pascal,
+              "lowercase" => Case::Lower,
+              "UPPERCASE" => Case::Upper,
+              "kebab-case" => Case::Kebab,
+              _ => return Err(spanned_error!(value, "Invalid value for `case`. Allowed values are: [ snake_case, UPPER_SNAKE, camelCase, PascalCase, lowercase, UPPERCASE, kebab-case ]"))
+            };
 
             case = Some(case_value);
           } else if ident == "table" {
