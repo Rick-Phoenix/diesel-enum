@@ -1,3 +1,6 @@
+#![cfg_attr(docsrs, feature(doc_cfg))]
+#![doc = include_str!("../README.md")]
+
 use std::borrow::Borrow;
 
 use convert_case::{Case, Casing};
