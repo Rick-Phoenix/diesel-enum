@@ -14,6 +14,10 @@ fn default_skip_check() -> bool {
   cfg!(feature = "default-skip-check")
 }
 
+fn default_auto_increment() -> bool {
+  cfg!(feature = "default-auto-increment")
+}
+
 macro_rules! error {
   ($span:expr, $error:expr) => {
     syn::Error::new($span, $error)
@@ -23,6 +27,26 @@ macro_rules! error {
 macro_rules! spanned_error {
   ($expr:expr, $error:expr) => {
     syn::Error::new_spanned($expr, $error)
+  };
+}
+
+macro_rules! check_duplicate {
+  ($ident:ident, $value:ident, $name:literal) => {
+    if $value.is_some() {
+      return Err(spanned_error!(
+        $ident,
+        concat!("Duplicate attribute `", $name, "`")
+      ));
+    }
+  };
+
+  ($ident:ident, $value:ident) => {
+    if $value.is_some() {
+      return Err(spanned_error!(
+        $ident,
+        concat!("Duplicate attribute `", stringify!($value), "`")
+      ));
+    }
   };
 }
 
@@ -68,14 +92,10 @@ impl<'a> Parse for Attributes<'a> {
   fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
     let mut table: Option<String> = None;
     let mut column: Option<String> = None;
-    let mut conn: Option<Check> = if default_skip_check() {
-      Some(Check::Skip)
-    } else {
-      None
-    };
+    let mut conn: Option<Check> = None;
     let mut case: Option<Case> = None;
     let mut mapped_type: Option<MappedType> = None;
-    let mut auto_increment = false;
+    let mut auto_increment: Option<bool> = None;
 
     let punctuated_args = Punctuated::<Meta, Token![,]>::parse_terminated(input)?;
 
@@ -88,9 +108,17 @@ impl<'a> Parse for Attributes<'a> {
           let ident = path.require_ident()?;
 
           if ident == "skip_check" {
+            check_duplicate!(ident, conn, "skip_check");
+
+            if matches!(conn, Some(Check::Conn(_))) {
+              return Err(spanned_error!(ident, "Cannot use `conn` with `skip_check`"));
+            }
+
             conn = Some(Check::Skip);
           } else if ident == "auto_increment" {
-            auto_increment = true;
+            check_duplicate!(ident, auto_increment);
+
+            auto_increment = Some(true);
           } else {
             return Err(spanned_error!(
               ident,
@@ -103,9 +131,7 @@ impl<'a> Parse for Attributes<'a> {
           let value = arg.value;
 
           if ident == "case" {
-            if case.is_some() {
-              return Err(spanned_error!(ident, "Duplicate attribute `case`"));
-            }
+            check_duplicate!(ident, case);
 
             let case_value = match extract_string_lit(&value)?.as_str()  {
               "snake_case" => Case::Snake,
@@ -120,9 +146,7 @@ impl<'a> Parse for Attributes<'a> {
 
             case = Some(case_value);
           } else if ident == "type" {
-            if mapped_type.is_some() {
-              return Err(spanned_error!(ident, "Duplicate attribute `type`"));
-            }
+            check_duplicate!(ident, mapped_type, "type");
 
             let type_ident = extract_path(value)?;
 
@@ -145,20 +169,18 @@ impl<'a> Parse for Attributes<'a> {
 
             mapped_type = Some(type_target);
           } else if ident == "table" {
-            if table.is_some() {
-              return Err(spanned_error!(ident, "Duplicate attribute `table`"));
-            }
+            check_duplicate!(ident, table);
 
             table = Some(extract_string_lit(&value)?);
           } else if ident == "column" {
-            if column.is_some() {
-              return Err(spanned_error!(ident, "Duplicate attribute `column`"));
-            }
+            check_duplicate!(ident, column);
 
             column = Some(extract_string_lit(&value)?);
           } else if ident == "conn" {
-            if conn.is_some() {
-              return Err(spanned_error!(ident, "Duplicate attribute `conn`"));
+            check_duplicate!(ident, conn);
+
+            if matches!(conn, Some(Check::Skip)) {
+              return Err(spanned_error!(ident, "Cannot use `conn` with `skip_check`"));
             }
 
             conn = Some(Check::Conn(extract_path(value)?));
@@ -175,19 +197,26 @@ impl<'a> Parse for Attributes<'a> {
       };
     }
 
-    let conn = conn.ok_or_else(|| {
-      error!(
+    let conn = if let Some(input) = conn {
+      input
+    } else if default_skip_check() {
+      Check::Skip
+    } else {
+      return Err(error!(
         input.span(),
         "At least one between `conn` and `skip_check` must be present"
-      )
-    })?;
+      ));
+    };
 
-    if matches!(mapped_type, Some(MappedType::Text)) && auto_increment {
+    if matches!(mapped_type, Some(MappedType::Text)) && matches!(auto_increment, Some(true)) {
       return Err(error!(
         input.span(),
         "Cannot use `auto_increment` when the mapped type is `Text`"
       ));
     }
+
+    // Only falling back here, in case someone is using the default but overriding it
+    let auto_increment = auto_increment.unwrap_or_else(|| default_auto_increment());
 
     Ok(Attributes {
       table,
@@ -233,6 +262,10 @@ fn process_variants(
             db_name = Some(val.parse::<LitStr>()?.value());
           } else if meta.path.is_ident("skip_check") {
             skip_check = true;
+          } else {
+            return Err(
+              meta.error("Unknown attribute. Allowed attributes are: [ id, name, skip_check ]"),
+            );
           }
 
           Ok(())
