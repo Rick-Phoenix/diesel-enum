@@ -5,7 +5,7 @@ use convert_case::{Case, Casing};
 use proc_macro::TokenStream;
 use proc_macro2::Span;
 pub(crate) use proc_macro2::TokenStream as TokenStream2;
-use quote::{format_ident, quote};
+use quote::{format_ident, quote, ToTokens};
 use syn::{
   parse::Parse, parse_macro_input, punctuated::Punctuated, Error, Expr, Ident, ItemEnum, Lit,
   LitInt, LitStr, Meta, Path, Token, Variant,
@@ -17,6 +17,10 @@ fn default_skip_check() -> bool {
 
 fn default_auto_increment() -> bool {
   cfg!(feature = "default-auto-increment")
+}
+
+fn default_map_int() -> bool {
+  cfg!(feature = "default-map-int")
 }
 
 macro_rules! error {
@@ -56,12 +60,19 @@ enum Check {
   Skip,
 }
 
+struct SqlType {
+  pub db_type: MappedType,
+  pub path: TokenStream2,
+}
+
 #[derive(Clone, Copy)]
 enum MappedType {
   Text,
   I32,
   I64,
   I16,
+  I8,
+  Custom,
 }
 
 struct Attributes<'a> {
@@ -69,7 +80,7 @@ struct Attributes<'a> {
   pub column: Option<String>,
   pub conn: Check,
   pub case: Option<Case<'a>>,
-  pub mapped_type: Option<MappedType>,
+  pub sql_type: SqlType,
   pub auto_increment: bool,
 }
 
@@ -95,13 +106,13 @@ impl<'a> Parse for Attributes<'a> {
     let mut column: Option<String> = None;
     let mut conn: Option<Check> = None;
     let mut case: Option<Case> = None;
-    let mut mapped_type: Option<MappedType> = None;
+    let mut sql_type: Option<SqlType> = None;
     let mut auto_increment: Option<bool> = None;
 
     let punctuated_args = Punctuated::<Meta, Token![,]>::parse_terminated(input)?;
 
     let attributes_error_msg =
-      "expected one of: `table`, `column`, `conn`, `skip_check`, `case`, `type`, `auto_increment`";
+      "expected one of: `table`, `column`, `conn`, `skip_check`, `case`, `sql_type`, `auto_increment`";
 
     for arg in punctuated_args {
       match arg {
@@ -146,29 +157,35 @@ impl<'a> Parse for Attributes<'a> {
             };
 
             case = Some(case_value);
-          } else if ident == "type" {
-            check_duplicate!(ident, mapped_type, "type");
+          } else if ident == "sql_type" {
+            check_duplicate!(ident, sql_type);
 
-            let type_ident = extract_path(value)?;
+            let type_path = extract_path(value)?;
 
-            let type_ident = type_ident.require_ident()?;
+            let type_ident = &type_path
+              .segments
+              .last()
+              .expect("Missing path segments")
+              .ident;
 
-            let type_target = if type_ident == "text" {
+            let type_target = if type_ident == "Text" {
               MappedType::Text
-            } else if type_ident == "i32" {
+            } else if type_ident == "Integer" {
               MappedType::I32
-            } else if type_ident == "i64" {
+            } else if type_ident == "BigInt" {
               MappedType::I64
-            } else if type_ident == "i16" {
+            } else if type_ident == "SmallInt" {
               MappedType::I16
+            } else if type_ident == "TinyInt" {
+              MappedType::I8
             } else {
-              return Err(spanned_error!(
-                type_ident,
-                "Invalid `type` attribute. Accepted values are: [ text, i16, i32, i64 ]"
-              ));
+              MappedType::Custom
             };
 
-            mapped_type = Some(type_target);
+            sql_type = Some(SqlType {
+              db_type: type_target,
+              path: type_path.to_token_stream(),
+            });
           } else if ident == "table" {
             check_duplicate!(ident, table);
 
@@ -209,7 +226,18 @@ impl<'a> Parse for Attributes<'a> {
       ));
     };
 
-    if matches!(mapped_type, Some(MappedType::Text)) && matches!(auto_increment, Some(true)) {
+    let sql_type = if let Some(sql_type) = sql_type {
+      sql_type
+    } else if default_map_int() {
+      SqlType {
+        db_type: MappedType::I32,
+        path: quote! { diesel::sql_types::Integer },
+      }
+    } else {
+      return Err(error!(input.span(), "No `sql_type` has been set"));
+    };
+
+    if let Some(true) = auto_increment && matches!(sql_type.db_type, MappedType::Text | MappedType::Custom) {
       return Err(error!(
         input.span(),
         "Cannot use `auto_increment` when the mapped type is `Text`"
@@ -224,7 +252,7 @@ impl<'a> Parse for Attributes<'a> {
       column,
       conn,
       case,
-      mapped_type,
+      sql_type,
       auto_increment,
     })
   }
@@ -313,8 +341,6 @@ pub fn diesel_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
 
   let attributes = parse_macro_input!(attrs as Attributes);
 
-  let mapped_type = attributes.mapped_type;
-
   let ast = parse_macro_input!(input as ItemEnum);
 
   let variants_data = match process_variants(ast.variants, attributes.case) {
@@ -325,9 +351,7 @@ pub fn diesel_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
   let enum_name = &ast.ident;
   let enum_name_str = enum_name.to_string();
 
-  let mapped_type = mapped_type.unwrap_or(MappedType::I32);
-
-  match mapped_type {
+  match &attributes.sql_type.db_type {
     MappedType::Text => process_text_enum(
       orig_input,
       enum_name,
@@ -355,18 +379,21 @@ fn process_int_enum(
   let Attributes {
     table: table_name,
     column: column_name,
-    mapped_type,
+    sql_type,
     conn: check,
     auto_increment,
     ..
   } = attributes;
 
-  let (rust_type, sql_type) = match mapped_type.unwrap_or(MappedType::I32) {
-    MappedType::I16 => (format_ident!("i16"), format_ident!("SmallInt")),
-    MappedType::I32 => (format_ident!("i32"), format_ident!("Integer")),
-    MappedType::I64 => (format_ident!("i64"), format_ident!("BigInt")),
-    MappedType::Text => unreachable!(),
+  let rust_type = match &sql_type.db_type {
+    MappedType::I16 => format_ident!("i16"),
+    MappedType::I32 => format_ident!("i32"),
+    MappedType::I64 => format_ident!("i64"),
+    MappedType::I8 => format_ident!("i8"),
+    _ => unreachable!(),
   };
+
+  let sql_type_path = sql_type.path;
 
   let variants_map = {
     let mut collection_tokens = TokenStream2::new();
@@ -515,30 +542,46 @@ fn process_int_enum(
     Check::Skip => None,
   };
 
+  let to_sql_conversion = traverse_enum(&variants_data, |data| {
+    let variant = &data.ident;
+    let id = LitInt::new(&format!("{}{}", data.id, rust_type), Span::call_site());
+
+    quote! {
+      Self::#variant => #id.to_sql(out),
+    }
+  });
+
   let output = quote! {
     #int_conversion
 
-    impl diesel::deserialize::FromSql<diesel::sql_types::#sql_type, diesel::sqlite::Sqlite> for #enum_name {
-      fn from_sql(bytes: diesel::sqlite::SqliteValue) -> diesel::deserialize::Result<Self> {
-        let value = <#rust_type as diesel::deserialize::FromSql<diesel::sql_types::#sql_type, diesel::sqlite::Sqlite>>::from_sql(bytes)?;
+    impl<DB> diesel::deserialize::FromSql<#sql_type_path, DB> for #enum_name
+    where
+      DB: diesel::backend::Backend,
+      #rust_type: diesel::deserialize::FromSql<#sql_type_path, DB>,
+    {
+      fn from_sql(bytes: DB::RawValue<'_>) -> diesel::deserialize::Result<Self> {
+        let value = #rust_type::from_sql(bytes)?;
 
         Ok(value.try_into()?)
       }
     }
 
-    impl diesel::serialize::ToSql<diesel::sql_types::#sql_type, diesel::sqlite::Sqlite> for #enum_name {
-      fn to_sql<'b>(&'b self, out: &mut diesel::serialize::Output<'b, '_, diesel::sqlite::Sqlite>) -> diesel::serialize::Result {
-        let value: #rust_type = self.clone().into();
-
-        out.set_value(value);
-        Ok(diesel::serialize::IsNull::No)
+    impl<DB> diesel::serialize::ToSql<#sql_type_path, DB> for #enum_name
+    where
+      DB: diesel::backend::Backend,
+      #rust_type: diesel::serialize::ToSql<#sql_type_path, DB>,
+    {
+      fn to_sql<'b>(&'b self, out: &mut diesel::serialize::Output<'b, '_, DB>) -> diesel::serialize::Result {
+        match self {
+          #to_sql_conversion
+        }
       }
     }
 
     #test_impl
 
     #[derive(diesel::deserialize::FromSqlRow, diesel::expression::AsExpression)]
-    #[diesel(sql_type = diesel::sql_types::#sql_type)]
+    #[diesel(sql_type = #sql_type_path)]
     #orig_input
   };
 

@@ -22,3 +22,4 @@ proc-macro = true
 [features]
 default-skip-check = []
 default-auto-increment = []
+default-map-int = []
