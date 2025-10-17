@@ -78,6 +78,7 @@ enum MappedType {
 struct Attributes<'a> {
   pub table: Option<String>,
   pub column: Option<String>,
+  pub name: Option<String>,
   pub conn: Check,
   pub case: Option<Case<'a>>,
   pub sql_type: SqlType,
@@ -107,12 +108,13 @@ impl<'a> Parse for Attributes<'a> {
     let mut conn: Option<Check> = None;
     let mut case: Option<Case> = None;
     let mut sql_type: Option<SqlType> = None;
+    let mut name: Option<String> = None;
     let mut auto_increment: Option<bool> = None;
 
     let punctuated_args = Punctuated::<Meta, Token![,]>::parse_terminated(input)?;
 
     let attributes_error_msg =
-      "expected one of: `table`, `column`, `conn`, `skip_check`, `case`, `sql_type`, `auto_increment`";
+      "expected one of: <`name` | `table`, `column`>, `conn`, `skip_check`, `case`, `sql_type`, `auto_increment`";
 
     for arg in punctuated_args {
       match arg {
@@ -157,6 +159,10 @@ impl<'a> Parse for Attributes<'a> {
             };
 
             case = Some(case_value);
+          } else if ident == "name" {
+            check_duplicate!(ident, name);
+
+            name = Some(extract_string_lit(&value)?);
           } else if ident == "sql_type" {
             check_duplicate!(ident, sql_type);
 
@@ -240,7 +246,14 @@ impl<'a> Parse for Attributes<'a> {
     if let Some(true) = auto_increment && matches!(sql_type.db_type, MappedType::Text | MappedType::Custom) {
       return Err(error!(
         input.span(),
-        "Cannot use `auto_increment` when the mapped type is `Text`"
+        "Cannot use `auto_increment` when the mapped type is not integer-based"
+      ));
+    }
+
+    if name.is_some() && (table.is_some() || column.is_some()) {
+      return Err(error!(
+        input.span(),
+        "`name` cannot be used with `table` or `column`"
       ));
     }
 
@@ -254,6 +267,7 @@ impl<'a> Parse for Attributes<'a> {
       case,
       sql_type,
       auto_increment,
+      name,
     })
   }
 }
@@ -352,7 +366,7 @@ pub fn diesel_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
   let enum_name_str = enum_name.to_string();
 
   match &attributes.sql_type.db_type {
-    MappedType::Text => process_text_enum(
+    MappedType::Text | MappedType::Custom => process_text_enum(
       orig_input,
       enum_name,
       enum_name_str,
@@ -442,7 +456,7 @@ fn process_int_enum(
         fn try_from(value: #rust_type) -> Result<Self, Self::Error> {
           match value {
             #from_int
-            _ => Err(format!("Unknown {}: {}", stringify!(#enum_name), value)),
+            x => Err(Box::from(format!("Unknown `{}` variant: {x}", stringify!(#enum_name)))),
           }
         }
       }
@@ -483,6 +497,10 @@ fn process_int_enum(
 
           #[test]
           fn #test_func_name() {
+            let enum_name = #enum_name_str;
+            let table_name = #table_name;
+            let column_name = #column_name;
+
             let mut rust_variants: HashMap<&'static str, #rust_type> = {
               #variants_map
             };
@@ -492,7 +510,7 @@ fn process_int_enum(
             let db_variants: Vec<(#rust_type, String)> = #table_name_ident::table
               .select((#table_name_ident::id, #table_name_ident::#column_name_ident))
               .load(conn)
-              .unwrap_or_else(|_| panic!("Failed to load variants from the database for the enum `{}`.", #enum_name_str));
+              .unwrap_or_else(|e| panic!("Failed to load the variants for the rust enum `{enum_name}` from the database column `{table_name}.{column_name}`: {e}"));
 
             let mut missing_variants: Vec<String> = Vec::new();
 
@@ -514,7 +532,7 @@ fn process_int_enum(
             if !missing_variants.is_empty() || !rust_variants.is_empty() || !id_mismatches.is_empty() {
               let mut error_message = String::new();
 
-              write!(error_message, "The rust enum `{}` and the database column `{}.{}` are out of sync: ", #enum_name_str, #table_name, #column_name).unwrap();
+              write!(error_message, "The rust enum `{enum_name}` and the database column `{table_name}.{column_name}` are out of sync: ").unwrap();
 
               for ((name, expected, found)) in id_mismatches {
                 write!(error_message, "\n  - Wrong integer conversion for `{name}`. Expected: {expected}, found: {found}").unwrap();
@@ -599,34 +617,65 @@ fn process_text_enum(
     table: table_name,
     column: column_name,
     conn: check,
+    name: db_enum_name,
+    sql_type,
     ..
   } = attributes;
 
-  let conversion_to_string = traverse_enum(&variants_data, |variant| {
-    let db_name = &variant.db_name;
-    let variant_ident = &variant.ident;
+  let db_type = sql_type.db_type;
 
-    quote! {
-      Self::#variant_ident => #db_name,
-    }
-  });
+  let is_custom = matches!(db_type, MappedType::Custom);
 
-  let conversion_from_str = traverse_enum(&variants_data, |variant| {
-    let db_name = &variant.db_name;
-    let variant_ident = &variant.ident;
+  let sql_type_path = sql_type.path;
 
-    quote! {
-      #db_name => Ok(Self::#variant_ident),
-    }
-  });
+  let mut conversion_to_str = TokenStream2::new();
+  let mut conversion_from_str = TokenStream2::new();
+
+  for data in &variants_data {
+    let db_name = &data.db_name;
+    let variant_ident = &data.ident;
+
+    conversion_to_str.extend(quote! {
+      Self::#variant_ident => #db_name.to_sql(out),
+    });
+
+    conversion_from_str.extend(quote! {
+      #db_name=> Ok(Self::#variant_ident),
+    });
+  }
 
   let test_impl = match check {
     Check::Conn(connection_func) => {
-      let table_name = table_name.unwrap_or_else(|| enum_name_str.to_case(Case::Snake));
-      let table_name_ident = format_ident!("{table_name}");
+      let (names_query, target_name) = if !is_custom {
+        let table_name = table_name.unwrap_or_else(|| enum_name_str.to_case(Case::Snake));
+        let table_name_ident = format_ident!("{table_name}");
 
-      let column_name = column_name.unwrap_or_else(|| "name".to_string());
-      let column_name_ident = format_ident!("{column_name}");
+        let column_name = column_name.unwrap_or_else(|| "name".to_string());
+        let column_name_ident = format_ident!("{column_name}");
+
+        (
+          quote! {
+            crate::schema::#table_name_ident::table
+              .select(crate::schema::#table_name_ident::#column_name_ident)
+          },
+          format!("{table_name}.{column_name}"),
+        )
+      } else {
+        let db_enum_name = db_enum_name.unwrap_or_else(|| enum_name_str.to_case(Case::Snake));
+
+        (
+          quote! {
+            #[derive(diesel::deserialize::QueryableByName)]
+            struct DbEnum {
+              #[diesel(sql_type = diesel::sql_types::Text)]
+              pub variant: String
+            }
+
+            diesel::sql_query(concat!(r#"SELECT unnest(enum_range(NULL::"#, #db_enum_name, ")) AS variant"))
+          },
+          db_enum_name,
+        )
+      };
 
       let test_mod_name =
         format_ident!("__diesel_enum_test_{}", enum_name_str.to_case(Case::Snake));
@@ -641,27 +690,35 @@ fn process_text_enum(
         }
       });
 
+      let source_type = if is_custom { "enum" } else { "column" };
+
       Some(quote! {
         #[cfg(test)]
         mod #test_mod_name {
           use super::*;
           use diesel::prelude::*;
           use std::collections::HashSet;
-          use crate::schema::#table_name_ident;
           use std::fmt::Write;
 
           #[test]
           fn #test_func_name() {
+            let source_type = #source_type;
+            let enum_name = #enum_name_str;
+            let target_name = #target_name;
+
             let mut rust_variants = HashSet::from({
               [ #(#variant_db_names),* ]
             });
 
             let conn = &mut #connection_func();
 
-            let db_variants: Vec<String> = #table_name_ident::table
-              .select(#table_name_ident::#column_name_ident)
+            let query = {
+              #names_query
+            };
+
+            let db_variants: Vec<String> = query
               .load(conn)
-              .unwrap_or_else(|_| panic!("Failed to load variants from the database for the enum `{}`.", #enum_name_str));
+              .unwrap_or_else(|e| panic!("Failed to load the variants for the rust enum `{enum_name}` from the database {source_type} `{target_name}`: {e}"));
 
             let mut missing_variants: Vec<String> = Vec::new();
 
@@ -676,7 +733,7 @@ fn process_text_enum(
             if !missing_variants.is_empty() || !rust_variants.is_empty() {
               let mut error_message = String::new();
 
-              write!(error_message, "The rust enum `{}` and the database table `{}` are out of sync: ", #enum_name_str, #table_name).unwrap();
+              write!(error_message, "The rust enum `{enum_name}` and the database {source_type} `{target_name}` are out of sync: ").unwrap();
 
               if !missing_variants.is_empty() {
                 missing_variants.sort();
@@ -688,7 +745,7 @@ fn process_text_enum(
                 let mut excess_variants: Vec<&str> = rust_variants.into_iter().collect();
                 excess_variants.sort();
 
-                write!(error_message, "\n  - Variants missing from DB: [ {} ]", excess_variants.join(", ")).unwrap();
+                write!(error_message, "\n  - Variants missing from the database: [ {} ]",  excess_variants.join(", ")).unwrap();
               }
 
               panic!("{error_message}");
@@ -701,32 +758,37 @@ fn process_text_enum(
   };
 
   let output = quote! {
-    impl diesel::deserialize::FromSql<diesel::sql_types::Text, diesel::sqlite::Sqlite> for #enum_name {
-      fn from_sql(bytes: diesel::sqlite::SqliteValue) -> diesel::deserialize::Result<Self> {
-        let value = <String as diesel::deserialize::FromSql<diesel::sql_types::Text, diesel::sqlite::Sqlite>>::from_sql(bytes)?;
+    impl<DB> diesel::deserialize::FromSql<#sql_type_path, DB> for #enum_name
+    where
+      DB: diesel::backend::Backend,
+      String: diesel::deserialize::FromSql<#sql_type_path, DB>,
+    {
+      fn from_sql(bytes: DB::RawValue<'_>) -> diesel::deserialize::Result<Self> {
+       let value = <String as diesel::deserialize::FromSql<#sql_type_path, DB>>::from_sql(bytes)?;
 
         match value.as_str() {
           #conversion_from_str
-          _ => Err(Box::from(format!("Unknown {}: {}", stringify!(#enum_name), value))),
+          x => Err(Box::from(format!("Unknown `{}` variant: {x}", stringify!(#enum_name)))),
         }
       }
     }
 
-    impl diesel::serialize::ToSql<diesel::sql_types::Text, diesel::sqlite::Sqlite> for #enum_name {
-      fn to_sql<'b>(&'b self, out: &mut diesel::serialize::Output<'b, '_, diesel::sqlite::Sqlite>) -> diesel::serialize::Result {
-        let value = match self {
-          #conversion_to_string
-        };
-
-        out.set_value(value);
-        Ok(diesel::serialize::IsNull::No)
+    impl<DB> diesel::serialize::ToSql<#sql_type_path, DB> for #enum_name
+    where
+      DB: diesel::backend::Backend,
+      str: diesel::serialize::ToSql<#sql_type_path, DB>,
+    {
+      fn to_sql<'b>(&'b self, out: &mut diesel::serialize::Output<'b, '_, DB>) -> diesel::serialize::Result {
+        match self {
+          #conversion_to_str
+        }
       }
     }
 
     #test_impl
 
     #[derive(diesel::deserialize::FromSqlRow, diesel::expression::AsExpression)]
-    #[diesel(sql_type = diesel::sql_types::Text)]
+    #[diesel(sql_type = #sql_type_path)]
     #orig_input
   };
 
