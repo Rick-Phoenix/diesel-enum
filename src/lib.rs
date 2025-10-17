@@ -1,13 +1,14 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
 
-use std::borrow::Borrow;
-
 use convert_case::{Case, Casing};
 use proc_macro::TokenStream;
 pub(crate) use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
-use syn::{parse::Parse, parse_macro_input, Error, Expr, Ident, ItemEnum, Lit, Meta, Path, Token};
+use syn::{
+  parse::Parse, parse_macro_input, punctuated::Punctuated, Error, Expr, Ident, ItemEnum, Lit,
+  LitInt, LitStr, Meta, Path, Token, Variant,
+};
 
 fn default_skip_check() -> bool {
   cfg!(feature = "default-skip-check")
@@ -76,7 +77,7 @@ impl<'a> Parse for Attributes<'a> {
     let mut mapped_type: Option<MappedType> = None;
     let mut auto_increment = false;
 
-    let punctuated_args = syn::punctuated::Punctuated::<Meta, Token![,]>::parse_terminated(input)?;
+    let punctuated_args = Punctuated::<Meta, Token![,]>::parse_terminated(input)?;
 
     let attributes_error_msg =
       "expected one of: `table`, `column`, `conn`, `skip_check`, `case`, `type`, `auto_increment`";
@@ -199,15 +200,70 @@ impl<'a> Parse for Attributes<'a> {
   }
 }
 
-fn traverse_enum<T, V>(variants: &[V], action: T) -> TokenStream2
+struct VariantData {
+  pub ident: Ident,
+  pub db_name: String,
+  pub id: i64,
+  pub skip_check: bool,
+}
+
+fn process_variants(
+  variants: Punctuated<Variant, Token![,]>,
+  case: Option<Case>,
+) -> Result<Vec<VariantData>, Error> {
+  let mut variants_data: Vec<VariantData> = Vec::new();
+
+  for (i, variant) in variants.iter().enumerate() {
+    let ident = variant.ident.clone();
+    let mut db_name: Option<String> = None;
+    let mut id: Option<i64> = None;
+    let mut skip_check = false;
+
+    let i = (i + 1) as i64;
+
+    for attr in &variant.attrs {
+      if attr.meta.path().is_ident("diesel_enum") {
+        attr.parse_nested_meta(|meta| {
+          if meta.path.is_ident("id") {
+            let val = meta.value()?;
+            id = Some(val.parse::<LitInt>()?.base10_parse::<i64>()?);
+          } else if meta.path.is_ident("name") {
+            let val = meta.value()?;
+
+            db_name = Some(val.parse::<LitStr>()?.value());
+          } else if meta.path.is_ident("skip_check") {
+            skip_check = true;
+          }
+
+          Ok(())
+        })?
+      }
+    }
+
+    variants_data.push(VariantData {
+      ident,
+      db_name: db_name.unwrap_or_else(|| {
+        if let Some(case) = case {
+          variant.ident.to_string().to_case(case)
+        } else {
+          variant.ident.to_string()
+        }
+      }),
+      id: id.unwrap_or(i),
+      skip_check,
+    });
+  }
+
+  Ok(variants_data)
+}
+
+fn traverse_enum<T>(variants: &[VariantData], action: T) -> TokenStream2
 where
-  T: Fn(&Ident) -> TokenStream2,
-  V: Borrow<Ident>,
+  T: Fn(&VariantData) -> TokenStream2,
 {
   let mut tokens = TokenStream2::new();
 
   for variant in variants {
-    let variant = variant.borrow();
     let action_tokens = action(variant);
     tokens.extend(quote! {
       #action_tokens
@@ -224,23 +280,13 @@ pub fn diesel_sqlite_enum(attrs: TokenStream, input: TokenStream) -> TokenStream
   let attributes = parse_macro_input!(attrs as Attributes);
 
   let mapped_type = attributes.mapped_type;
-  let db_variants_case = attributes.case;
 
   let ast = parse_macro_input!(input as ItemEnum);
 
-  let variant_idents: Vec<&Ident> = ast.variants.iter().map(|v| &v.ident).collect();
-
-  let variant_db_names: Vec<String> = ast
-    .variants
-    .iter()
-    .map(|v| {
-      if let Some(case) = db_variants_case {
-        v.ident.to_string().to_case(case)
-      } else {
-        v.ident.to_string()
-      }
-    })
-    .collect();
+  let variants_data = match process_variants(ast.variants, attributes.case) {
+    Ok(data) => data,
+    Err(e) => return e.to_compile_error().into(),
+  };
 
   let enum_name = &ast.ident;
   let enum_name_str = enum_name.to_string();
@@ -252,16 +298,14 @@ pub fn diesel_sqlite_enum(attrs: TokenStream, input: TokenStream) -> TokenStream
       orig_input,
       enum_name,
       enum_name_str,
-      variant_idents,
-      variant_db_names,
+      variants_data,
       attributes,
     ),
     _ => process_int_enum(
       orig_input,
       enum_name,
       enum_name_str,
-      variant_idents,
-      variant_db_names,
+      variants_data,
       attributes,
     ),
   }
@@ -271,8 +315,7 @@ fn process_int_enum(
   orig_input: TokenStream2,
   enum_name: &Ident,
   enum_name_str: String,
-  variant_idents: Vec<&Ident>,
-  variant_db_names: Vec<String>,
+  variants_data: Vec<VariantData>,
   attributes: Attributes,
 ) -> TokenStream {
   let Attributes {
@@ -296,7 +339,9 @@ fn process_int_enum(
 
     let variants_map_ident = format_ident!("map");
 
-    for (variant_ident, db_name) in variant_idents.iter().zip(variant_db_names.iter()) {
+    for variant in &variants_data {
+      let db_name = &variant.db_name;
+      let variant_ident = &variant.ident;
       collection_tokens.extend(quote! {
         #variants_map_ident.insert(#db_name, #enum_name::#variant_ident.into());
       });
@@ -316,15 +361,16 @@ fn process_int_enum(
 
     let mut from_int = TokenStream2::new();
 
-    for (i, variant) in variant_idents.iter().enumerate() {
-      let i = (i + 1) as i32;
+    for variant in &variants_data {
+      let id = variant.id;
+      let variant_ident = &variant.ident;
 
       into_int.extend(quote! {
-        Self::#variant => #i,
+        Self::#variant_ident => #id,
       });
 
       from_int.extend(quote! {
-        #i => Ok(Self::#variant),
+        #id => Ok(Self::#variant_ident),
       });
     }
 
@@ -469,59 +515,33 @@ fn process_text_enum(
   orig_input: TokenStream2,
   enum_name: &Ident,
   enum_name_str: String,
-  variant_idents: Vec<&Ident>,
-  variant_db_names: Vec<String>,
+  variants_data: Vec<VariantData>,
   attributes: Attributes,
 ) -> TokenStream {
   let Attributes {
     table: table_name,
     column: column_name,
-    case: db_variants_case,
     conn: check,
     ..
   } = attributes;
 
-  let conversion_to_string = if db_variants_case.is_none() {
-    traverse_enum(&variant_idents, |variant| {
-      quote! {
-        Self::#variant => stringify!(#variant).to_string(),
-      }
-    })
-  } else {
-    let mut tokens = TokenStream2::new();
+  let conversion_to_string = traverse_enum(&variants_data, |variant| {
+    let db_name = &variant.db_name;
+    let variant_ident = &variant.ident;
 
-    variant_idents
-      .iter()
-      .zip(variant_db_names.iter())
-      .for_each(|(variant, db_name)| {
-        tokens.extend(quote! {
-          Self::#variant => #db_name,
-        });
-      });
+    quote! {
+      Self::#variant_ident => #db_name,
+    }
+  });
 
-    tokens
-  };
+  let conversion_from_str = traverse_enum(&variants_data, |variant| {
+    let db_name = &variant.db_name;
+    let variant_ident = &variant.ident;
 
-  let conversion_from_str = if db_variants_case.is_none() {
-    traverse_enum(&variant_idents, |variant| {
-      quote! {
-        stringify!(#variant) => Ok(Self::#variant),
-      }
-    })
-  } else {
-    let mut tokens = TokenStream2::new();
-
-    variant_idents
-      .iter()
-      .zip(variant_db_names.iter())
-      .for_each(|(variant, db_name)| {
-        tokens.extend(quote! {
-          #db_name => Ok(Self::#variant),
-        });
-      });
-
-    tokens
-  };
+    quote! {
+      #db_name => Ok(Self::#variant_ident),
+    }
+  });
 
   let test_impl = match check {
     Check::Conn(connection_func) => {
@@ -535,6 +555,14 @@ fn process_text_enum(
         format_ident!("__diesel_enum_test_{}", enum_name_str.to_case(Case::Snake));
 
       let test_func_name = format_ident!("diesel_enum_test_{}", enum_name_str.to_case(Case::Snake));
+
+      let variant_db_names = variants_data.iter().filter_map(|data| {
+        if !data.skip_check {
+          Some(&data.db_name)
+        } else {
+          None
+        }
+      });
 
       Some(quote! {
         #[cfg(test)]
