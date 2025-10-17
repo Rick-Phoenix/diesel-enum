@@ -44,6 +44,7 @@ struct Attributes<'a> {
   pub conn: Check,
   pub case: Option<Case<'a>>,
   pub mapped_type: Option<MappedType>,
+  pub auto_increment: bool,
 }
 
 fn extract_string_lit(expr: &Expr) -> Result<String, Error> {
@@ -73,8 +74,12 @@ impl<'a> Parse for Attributes<'a> {
     };
     let mut case: Option<Case> = None;
     let mut mapped_type: Option<MappedType> = None;
+    let mut auto_increment = false;
 
     let punctuated_args = syn::punctuated::Punctuated::<Meta, Token![,]>::parse_terminated(input)?;
+
+    let attributes_error_msg =
+      "expected one of: `table`, `column`, `conn`, `skip_check`, `case`, `type`, `auto_increment`";
 
     for arg in punctuated_args {
       match arg {
@@ -83,13 +88,12 @@ impl<'a> Parse for Attributes<'a> {
 
           if ident == "skip_check" {
             conn = Some(Check::Skip);
+          } else if ident == "auto_increment" {
+            auto_increment = true;
           } else {
             return Err(spanned_error!(
               ident,
-              format!(
-                "Unknown attribute `{}`, expected one of: `table`, `column`, `conn`, `skip_check` or `case`",
-                ident
-              )
+              format!("Unknown attribute `{ident}`, {attributes_error_msg}")
             ));
           }
         }
@@ -160,10 +164,7 @@ impl<'a> Parse for Attributes<'a> {
           } else {
             return Err(spanned_error!(
               ident,
-              format!(
-                "Unknown attribute `{}`, expected one of: `table`, `column`, `conn`, `skip_check` or `case`",
-                ident
-              )
+              format!("Unknown attribute `{ident}`, {attributes_error_msg}")
             ));
           }
         }
@@ -180,12 +181,20 @@ impl<'a> Parse for Attributes<'a> {
       )
     })?;
 
+    if matches!(mapped_type, Some(MappedType::Text)) && auto_increment {
+      return Err(error!(
+        input.span(),
+        "Cannot use `auto_increment` when the mapped type is `Text`"
+      ));
+    }
+
     Ok(Attributes {
       table,
       column,
       conn,
       case,
       mapped_type,
+      auto_increment,
     })
   }
 }
@@ -271,6 +280,7 @@ fn process_int_enum(
     column: column_name,
     mapped_type,
     conn: check,
+    auto_increment,
     ..
   } = attributes;
 
@@ -299,6 +309,47 @@ fn process_int_enum(
 
       #variants_map_ident
     }
+  };
+
+  let int_conversion = if auto_increment {
+    let mut into_int = TokenStream2::new();
+
+    let mut from_int = TokenStream2::new();
+
+    for (i, variant) in variant_idents.iter().enumerate() {
+      let i = (i + 1) as i32;
+
+      into_int.extend(quote! {
+        Self::#variant => #i,
+      });
+
+      from_int.extend(quote! {
+        #i => Ok(Self::#variant),
+      });
+    }
+
+    Some(quote! {
+      impl TryFrom<#rust_type> for #enum_name {
+        type Error = String;
+
+        fn try_from(value: #rust_type) -> Result<Self, Self::Error> {
+          match value {
+            #from_int
+            _ => Err(format!("Unknown {}: {}", stringify!(#enum_name), value)),
+          }
+        }
+      }
+
+      impl Into<#rust_type> for #enum_name {
+        fn into(self) -> #rust_type {
+          match self {
+            #into_int
+          }
+        }
+      }
+    })
+  } else {
+    None
   };
 
   let test_impl = match check {
@@ -385,6 +436,8 @@ fn process_int_enum(
   };
 
   let output = quote! {
+    #int_conversion
+
     impl diesel::deserialize::FromSql<diesel::sql_types::#sql_type, diesel::sqlite::Sqlite> for #enum_name {
       fn from_sql(bytes: diesel::sqlite::SqliteValue) -> diesel::deserialize::Result<Self> {
         let value = <#rust_type as diesel::deserialize::FromSql<diesel::sql_types::#sql_type, diesel::sqlite::Sqlite>>::from_sql(bytes)?;
