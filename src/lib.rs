@@ -3,6 +3,7 @@
 
 use convert_case::{Case, Casing};
 use proc_macro::TokenStream;
+use proc_macro2::Span;
 pub(crate) use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 use syn::{
@@ -307,7 +308,7 @@ where
 }
 
 #[proc_macro_attribute]
-pub fn diesel_sqlite_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
+pub fn diesel_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
   let orig_input: TokenStream2 = input.clone().into();
 
   let attributes = parse_macro_input!(attrs as Attributes);
@@ -395,7 +396,7 @@ fn process_int_enum(
     let mut from_int = TokenStream2::new();
 
     for variant in &variants_data {
-      let id = variant.id;
+      let id = LitInt::new(&format!("{}{}", variant.id, rust_type), Span::call_site());
       let variant_ident = &variant.ident;
 
       into_int.extend(quote! {
