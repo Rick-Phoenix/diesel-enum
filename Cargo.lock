@@ -12,7 +12,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "diesel-sqlite-enum"
+name = "diesel-enum-checked"
 version = "0.1.0"
 dependencies = [
  "convert_case",
