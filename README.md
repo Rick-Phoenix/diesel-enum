@@ -6,7 +6,7 @@ It can be used purely for consistency during read/write operations, or it can be
 
 ## Usage
 
-Simply use the `#[diesel_sqlite_enum]` on an enum.
+Simply use the `#[diesel_enum]` on an enum.
 
 Example:
 

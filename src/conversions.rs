@@ -25,7 +25,7 @@ pub fn enum_to_enum_conversion(enum_name: &Ident, variants_data: &[VariantData])
 
   quote! {
     impl From<#enum_name> for #id_enum {
-      fn from(value: #enum_name) {
+      fn from(value: #enum_name) -> Self {
         match value {
           #from_text_enum
         }
@@ -33,7 +33,7 @@ pub fn enum_to_enum_conversion(enum_name: &Ident, variants_data: &[VariantData])
     }
 
     impl From<#id_enum> for #enum_name {
-      fn from(value: #id_enum) {
+      fn from(value: #id_enum) -> Self {
         match value {
           #from_id_enum
         }
@@ -71,7 +71,7 @@ pub fn enum_int_conversions(
       fn try_from(value: #rust_type) -> Result<Self, Self::Error> {
         match value {
           #from_int
-          x => Err(Box::from(format!("Unknown `{}` variant: {x}", stringify!(#enum_name)))),
+          x => Err(format!("Unknown `{}` variant: {x}", stringify!(#enum_name))),
         }
       }
     }
@@ -145,7 +145,7 @@ pub fn sql_string_conversions(
     });
 
     conversion_from_str.extend(quote! {
-      #db_name=> Ok(Self::#variant_ident),
+      #db_name => Ok(Self::#variant_ident),
     });
   }
 

@@ -21,7 +21,7 @@ pub fn process_variants(
     let mut skip_check = false;
 
     for attr in &variant.attrs {
-      if attr.meta.path().is_ident("diesel_enum") {
+      if attr.meta.path().is_ident("db_mapping") {
         attr.parse_nested_meta(|meta| {
           if meta.path.is_ident("id") {
             let val = meta.value()?;

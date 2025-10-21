@@ -22,3 +22,4 @@ proc-macro = true
 [features]
 default-skip-check = []
 default-text-impl = []
+no-default-int-impl = []

@@ -9,6 +9,7 @@ pub(crate) mod conversions;
 pub(crate) mod process_variants;
 pub(crate) mod test_generation;
 
+use convert_case::{Case, Casing};
 use proc_macro::TokenStream;
 pub(crate) use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
@@ -46,11 +47,18 @@ where
 pub fn diesel_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
   let orig_input: TokenStream2 = input.clone().into();
 
-  let attributes = parse_macro_input!(attrs as Attributes);
+  let Attributes {
+    table,
+    column,
+    conn,
+    case,
+    name_mapping,
+    id_mapping,
+  } = parse_macro_input!(attrs as Attributes);
 
   let ast = parse_macro_input!(input as ItemEnum);
 
-  let variants_data = match process_variants(&ast.variants, attributes.case) {
+  let variants_data = match process_variants(&ast.variants, case) {
     Ok(data) => data,
     Err(e) => return e.to_compile_error().into(),
   };
@@ -58,52 +66,64 @@ pub fn diesel_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
   let enum_name = &ast.ident;
   let enum_name_str = enum_name.to_string();
 
+  let table_name = table.unwrap_or_else(|| enum_name_str.to_case(Case::Snake));
+  let column_name = column.as_deref().unwrap_or_else(|| "name");
+
   let mut enum_impls = TokenStream2::new();
 
-  if let Check::Conn(connection_func) = attributes.conn {
-    let test_impl = if let Some(IdMapping { rust_type, .. }) = &attributes.id_mapping {
-      test_with_id(
+  if id_mapping.is_none() && name_mapping.is_none() {
+    return Error::new_spanned(
+      orig_input,
+      "At least one between `id_mapping` and `name_mapping` must be set",
+    )
+    .to_compile_error()
+    .into();
+  }
+
+  if let Some(NameMapping {
+    path: sql_type_path,
+    db_type,
+  }) = &name_mapping
+  {
+    let sql_string_conversions = sql_string_conversions(&enum_name, &sql_type_path, &variants_data);
+
+    enum_impls.extend(sql_string_conversions);
+
+    enum_impls.extend(quote! {
+      #[derive(diesel_enum_checked::MappedEnum, Debug, diesel::deserialize::FromSqlRow, diesel::expression::AsExpression)]
+      #[diesel(sql_type = #sql_type_path)]
+      #orig_input
+    });
+
+    if let Check::Conn(connection_func) = &conn && id_mapping.is_none() {
+      let test_impl = test_without_id(
         &enum_name_str,
-        attributes.table,
-        attributes.column,
-        &rust_type,
-        &connection_func,
-        &variants_data,
-      )
-    } else if let Some(NameMapping { db_type, .. }) = &attributes.name_mapping {
-      test_without_id(
-        &enum_name_str,
-        attributes.table,
-        attributes.column,
+        &table_name,
+        &column_name,
         &db_type,
         &connection_func,
         &variants_data,
-      )
-    } else {
-      return Error::new_spanned(
-        orig_input,
-        "At least one between `id_mapping` and `name_mapping` must be set",
-      )
-      .to_compile_error()
-      .into();
-    };
+      );
 
-    enum_impls.extend(test_impl);
+      enum_impls.extend(test_impl);
+    }
   }
 
   if let Some(IdMapping {
     type_path: sql_type_path,
-    no_auto_impl,
+    conversion_method,
     rust_type,
-  }) = &attributes.id_mapping
+  }) = id_mapping
   {
-    let has_double_mapping = attributes.name_mapping.is_some();
+    let has_double_mapping = name_mapping.is_some();
 
     let target_enum_name = if has_double_mapping {
       format_ident!("{enum_name}Id")
     } else {
       enum_name.clone()
     };
+
+    let target_enum_str = target_enum_name.to_string();
 
     let int_to_from_sql = sql_int_conversions(
       &target_enum_name,
@@ -114,15 +134,30 @@ pub fn diesel_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
 
     enum_impls.extend(int_to_from_sql);
 
-    if !*no_auto_impl {
+    if conversion_method.is_none() {
       let int_conversion = enum_int_conversions(&target_enum_name, &rust_type, &variants_data);
 
       enum_impls.extend(int_conversion);
     }
 
+    if let Check::Conn(connection_func) = &conn {
+      let test_impl = test_with_id(
+        &target_enum_name,
+        &target_enum_str,
+        &table_name,
+        &column_name,
+        &rust_type,
+        &connection_func,
+        &variants_data,
+        conversion_method,
+      );
+
+      enum_impls.extend(test_impl);
+    }
+
     if !has_double_mapping {
       enum_impls.extend(quote! {
-        #[derive(diesel::deserialize::FromSqlRow, diesel::expression::AsExpression)]
+        #[derive(Debug, diesel_enum_checked::MappedEnum diesel::deserialize::FromSqlRow, diesel::expression::AsExpression)]
         #[diesel(sql_type = #sql_type_path)]
         #orig_input
       });
@@ -133,9 +168,9 @@ pub fn diesel_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
 
       enum_copy.ident = target_enum_name;
 
-      enum_copy
-        .attrs
-        .retain(|att| !att.path().is_ident("diesel_enum"));
+      // enum_copy
+      //   .attrs
+      //   .retain(|att| !att.path().is_ident("diesel_enum"));
 
       for variant in enum_copy.variants.iter_mut() {
         variant
@@ -144,7 +179,7 @@ pub fn diesel_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
       }
 
       enum_impls.extend(quote! {
-        #[derive(diesel::deserialize::FromSqlRow, diesel::expression::AsExpression)]
+        #[derive(Debug, diesel_enum_checked::MappedEnum, diesel::deserialize::FromSqlRow, diesel::expression::AsExpression)]
         #[diesel(sql_type = #sql_type_path)]
         #enum_copy
 
@@ -153,21 +188,10 @@ pub fn diesel_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
     }
   }
 
-  if let Some(NameMapping {
-    path: sql_type_path,
-    ..
-  }) = attributes.name_mapping
-  {
-    let sql_string_conversions = sql_string_conversions(&enum_name, &sql_type_path, &variants_data);
-
-    enum_impls.extend(sql_string_conversions);
-
-    enum_impls.extend(quote! {
-      #[derive(diesel::deserialize::FromSqlRow, diesel::expression::AsExpression)]
-      #[diesel(sql_type = #sql_type_path)]
-      #orig_input
-    });
-  }
-
   enum_impls.into()
+}
+
+#[proc_macro_derive(MappedEnum, attributes(db_mapping))]
+pub fn derive_macro(_input: TokenStream) -> TokenStream {
+  TokenStream::new()
 }

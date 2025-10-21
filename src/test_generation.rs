@@ -5,33 +5,39 @@ use syn::{Ident, Path};
 use crate::{attributes::NameTypes, TokenStream2, VariantData};
 
 pub fn test_with_id(
-  enum_name: &str,
-  table_name: Option<String>,
-  column_name: Option<String>,
+  enum_name: &Ident,
+  enum_name_str: &str,
+  table_name: &str,
+  column_name: &str,
   id_rust_type: &Ident,
   connection_func: &Path,
   variants_data: &[VariantData],
+  conversion_method: Option<TokenStream2>,
 ) -> TokenStream2 {
-  let table_name = table_name.unwrap_or_else(|| enum_name.to_case(Case::Snake));
   let table_name_ident = format_ident!("{table_name}");
-
-  let column_name = column_name.unwrap_or_else(|| enum_name.to_case(Case::Snake));
   let column_name_ident = format_ident!("{column_name}");
 
-  let test_mod_name = format_ident!("__diesel_enum_test_{}", enum_name.to_case(Case::Snake));
-  let test_func_name = format_ident!("diesel_enum_test_{}", enum_name.to_case(Case::Snake));
+  let test_mod_name = format_ident!("__diesel_enum_test_{}", enum_name_str.to_case(Case::Snake));
+  let test_func_name = format_ident!("diesel_enum_test_{}", enum_name_str.to_case(Case::Snake));
 
   let variants_map = {
     let mut collection_tokens = TokenStream2::new();
 
     let variants_map_ident = format_ident!("map");
 
+    let conversion_method = conversion_method.unwrap_or_else(|| {
+      quote! {
+        <#enum_name as Into<#id_rust_type>>::into
+      }
+    });
+
     for variant in variants_data {
       if !variant.skip_check {
         let db_name = &variant.db_name;
         let variant_ident = &variant.ident;
+
         collection_tokens.extend(quote! {
-          #variants_map_ident.insert(#db_name, #enum_name::#variant_ident.into());
+          #variants_map_ident.insert(#db_name, #conversion_method(#enum_name::#variant_ident));
         });
       }
     }
@@ -56,7 +62,7 @@ pub fn test_with_id(
 
       #[test]
       fn #test_func_name() {
-        let enum_name = #enum_name;
+        let enum_name = #enum_name_str;
         let table_name = #table_name;
         let column_name = #column_name;
 
@@ -119,8 +125,8 @@ pub fn test_with_id(
 
 pub fn test_without_id(
   enum_name: &str,
-  table_name: Option<String>,
-  column_name: Option<String>,
+  table_name: &str,
+  column_name: &str,
   db_type: &NameTypes,
   connection_func: &Path,
   variants_data: &[VariantData],
@@ -141,10 +147,7 @@ pub fn test_without_id(
       db_enum_name.clone(),
     )
   } else {
-    let table_name = table_name.unwrap_or_else(|| enum_name.to_case(Case::Snake));
     let table_name_ident = format_ident!("{table_name}");
-
-    let column_name = column_name.unwrap_or_else(|| "name".to_string());
     let column_name_ident = format_ident!("{column_name}");
 
     (

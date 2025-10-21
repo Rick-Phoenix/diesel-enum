@@ -1,11 +1,9 @@
 use convert_case::{Case, Casing};
 use quote::{format_ident, quote, ToTokens};
-use syn::{
-  parse::Parse, punctuated::Punctuated, Error, Expr, Ident, Lit, Meta, MetaNameValue, Path, Token,
-};
+use syn::{parse::Parse, punctuated::Punctuated, Error, Expr, Ident, Lit, Meta, Path, Token};
 
 use crate::{
-  features::{default_skip_check, default_text_impl},
+  features::{default_skip_check, default_text_impl, no_default_int_impl},
   Check, TokenStream2,
 };
 
@@ -20,7 +18,7 @@ pub struct Attributes<'a> {
 
 pub struct IdMapping {
   pub type_path: TokenStream2,
-  pub no_auto_impl: bool,
+  pub conversion_method: Option<TokenStream2>,
   pub rust_type: Ident,
 }
 
@@ -28,7 +26,7 @@ impl Default for IdMapping {
   fn default() -> Self {
     Self {
       type_path: quote! { diesel::sql_types::Integer },
-      no_auto_impl: false,
+      conversion_method: None,
       rust_type: format_ident!("i32"),
     }
   }
@@ -38,17 +36,30 @@ impl Parse for IdMapping {
   fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
     let mut rust_type: Option<Ident> = None;
     let mut int_type_path: Option<TokenStream2> = None;
-    let mut no_auto_impl = false;
+    let mut conversion_method: Option<TokenStream2> = None;
 
-    let punctuated_args = Punctuated::<MetaNameValue, Token![,]>::parse_terminated(input)?;
+    let punctuated_args = Punctuated::<Meta, Token![,]>::parse_terminated(input)?;
+
+    let args_len = punctuated_args.len();
 
     for arg in punctuated_args {
-      let ident = arg.path.require_ident()?;
+      let ident = arg.path().require_ident()?;
 
-      if ident == "type" {
+      if ident == "default" {
+        if args_len != 1 {
+          return Err(error!(
+            input.span(),
+            "Cannot use other `id_mapping` attributes when using `default`"
+          ));
+        } else {
+          return Ok(Self::default());
+        }
+      } else if ident == "type" {
         check_duplicate!(ident, rust_type, "type");
 
-        let type_path = extract_path(arg.value)?;
+        let value = arg.require_name_value()?.clone().value;
+
+        let type_path = extract_path(value)?;
 
         let type_ident = &type_path
           .segments
@@ -72,18 +83,23 @@ impl Parse for IdMapping {
 
         rust_type = Some(format_ident!("{type_target}"));
         int_type_path = Some(type_path.to_token_stream());
-      } else if ident == "no_auto_impl" {
-        no_auto_impl = true;
+      } else if ident == "conversion_method" {
+        check_duplicate!(ident, conversion_method);
+
+        conversion_method =
+          Some(extract_path(arg.require_name_value()?.value.clone())?.to_token_stream());
       } else {
         return Err(spanned_error!(
           ident,
-          format!("Unknown attribute `{ident}`. Expected one of: `type`, `no_auto_impl`")
+          format!(
+            "Unknown attribute `{ident}`. Expected one of: `default`, `type`, `conversion_method`"
+          )
         ));
       }
     }
 
     Ok(Self {
-      no_auto_impl,
+      conversion_method,
       type_path: int_type_path.unwrap_or_else(|| quote! { diesel::sql_types::Integer }),
       rust_type: rust_type.unwrap_or_else(|| format_ident!("i32")),
     })
@@ -120,27 +136,38 @@ impl Parse for NameMapping {
     let mut custom_type_path: Option<Path> = None;
     let mut custom_enum_name: Option<String> = None;
 
-    let punctuated_args = Punctuated::<MetaNameValue, Token![,]>::parse_terminated(input)?;
+    let punctuated_args = Punctuated::<Meta, Token![,]>::parse_terminated(input)?;
+
+    let args_len = punctuated_args.len();
 
     for arg in punctuated_args {
-      let ident = arg.path.require_ident()?;
+      let ident = arg.path().require_ident()?;
 
-      if ident == "type" {
+      if ident == "default" {
+        if args_len != 1 {
+          return Err(error!(
+            input.span(),
+            "Cannot use other `name_mapping` attributes when using `default`"
+          ));
+        } else {
+          return Ok(Self::default());
+        }
+      } else if ident == "type" {
         check_duplicate!(ident, custom_type_path, "type");
 
-        let type_path = extract_path(arg.value)?;
+        let type_path = extract_path(arg.require_name_value()?.clone().value)?;
 
         custom_type_path = Some(type_path);
       } else if ident == "name" {
         check_duplicate!(ident, custom_enum_name, "name");
 
-        let db_enum_name = extract_string_lit(&arg.value)?;
+        let db_enum_name = extract_string_lit(&arg.require_name_value()?.value)?;
 
         custom_enum_name = Some(db_enum_name);
       } else {
         return Err(spanned_error!(
           ident,
-          format!("Unknown attribute `{ident}`. Expected one of: `type`, `name`")
+          format!("Unknown attribute `{ident}`. Expected one of: `default`, `type`, `name`")
         ));
       }
     }
@@ -297,13 +324,12 @@ impl<'a> Parse for Attributes<'a> {
       ));
     };
 
-    if id_mapping.is_none() && name_mapping.is_none() {
-      // Using reasonable defaults in case nothing is selected
-      if default_text_impl() {
-        name_mapping = Some(NameMapping::default())
-      } else {
-        id_mapping = Some(IdMapping::default())
-      };
+    if id_mapping.is_none() && !no_default_int_impl() {
+      id_mapping = Some(IdMapping::default());
+    }
+
+    if name_mapping.is_none() && default_text_impl() {
+      name_mapping = Some(NameMapping::default());
     }
 
     Ok(Attributes {
