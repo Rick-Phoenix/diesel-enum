@@ -93,7 +93,7 @@ pub fn diesel_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
 
   if let Some(IdMapping {
     type_path: sql_type_path,
-    auto_increment,
+    no_auto_impl,
     rust_type,
   }) = &attributes.id_mapping
   {
@@ -114,7 +114,7 @@ pub fn diesel_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
 
     enum_impls.extend(int_to_from_sql);
 
-    if *auto_increment {
+    if !*no_auto_impl {
       let int_conversion = enum_int_conversions(&target_enum_name, &rust_type, &variants_data);
 
       enum_impls.extend(int_conversion);

@@ -4,7 +4,10 @@ use syn::{
   parse::Parse, punctuated::Punctuated, Error, Expr, Ident, Lit, Meta, MetaNameValue, Path, Token,
 };
 
-use crate::{features::default_skip_check, Check, TokenStream2};
+use crate::{
+  features::{default_skip_check, default_text_impl},
+  Check, TokenStream2,
+};
 
 pub struct Attributes<'a> {
   pub table: Option<String>,
@@ -17,15 +20,25 @@ pub struct Attributes<'a> {
 
 pub struct IdMapping {
   pub type_path: TokenStream2,
-  pub auto_increment: bool,
+  pub no_auto_impl: bool,
   pub rust_type: Ident,
+}
+
+impl Default for IdMapping {
+  fn default() -> Self {
+    Self {
+      type_path: quote! { diesel::sql_types::Integer },
+      no_auto_impl: false,
+      rust_type: format_ident!("i32"),
+    }
+  }
 }
 
 impl Parse for IdMapping {
   fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
     let mut rust_type: Option<Ident> = None;
     let mut int_type_path: Option<TokenStream2> = None;
-    let mut auto_increment = false;
+    let mut no_auto_impl = false;
 
     let punctuated_args = Punctuated::<MetaNameValue, Token![,]>::parse_terminated(input)?;
 
@@ -33,6 +46,8 @@ impl Parse for IdMapping {
       let ident = arg.path.require_ident()?;
 
       if ident == "type" {
+        check_duplicate!(ident, rust_type, "type");
+
         let type_path = extract_path(arg.value)?;
 
         let type_ident = &type_path
@@ -57,18 +72,18 @@ impl Parse for IdMapping {
 
         rust_type = Some(format_ident!("{type_target}"));
         int_type_path = Some(type_path.to_token_stream());
-      } else if ident == "auto_increment" {
-        auto_increment = true;
+      } else if ident == "no_auto_impl" {
+        no_auto_impl = true;
       } else {
         return Err(spanned_error!(
           ident,
-          format!("Unknown attribute `{ident}`. Expected one of: `type`, `auto_increment`")
+          format!("Unknown attribute `{ident}`. Expected one of: `type`, `no_auto_impl`")
         ));
       }
     }
 
     Ok(Self {
-      auto_increment,
+      no_auto_impl,
       type_path: int_type_path.unwrap_or_else(|| quote! { diesel::sql_types::Integer }),
       rust_type: rust_type.unwrap_or_else(|| format_ident!("i32")),
     })
@@ -91,6 +106,15 @@ pub struct NameMapping {
   pub path: TokenStream2,
 }
 
+impl Default for NameMapping {
+  fn default() -> Self {
+    Self {
+      db_type: NameTypes::Text,
+      path: quote! { diesel::sql_types::Text },
+    }
+  }
+}
+
 impl Parse for NameMapping {
   fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
     let mut custom_type_path: Option<Path> = None;
@@ -102,10 +126,14 @@ impl Parse for NameMapping {
       let ident = arg.path.require_ident()?;
 
       if ident == "type" {
+        check_duplicate!(ident, custom_type_path, "type");
+
         let type_path = extract_path(arg.value)?;
 
         custom_type_path = Some(type_path);
       } else if ident == "name" {
+        check_duplicate!(ident, custom_enum_name, "name");
+
         let db_enum_name = extract_string_lit(&arg.value)?;
 
         custom_enum_name = Some(db_enum_name);
@@ -181,13 +209,17 @@ impl<'a> Parse for Attributes<'a> {
           let ident = list.path.require_ident()?;
 
           if ident == "name_mapping" {
+            check_duplicate!(ident, name_mapping);
+
             name_mapping = Some(syn::parse2::<NameMapping>(list.tokens)?);
           } else if ident == "id_mapping" {
+            check_duplicate!(ident, id_mapping);
+
             id_mapping = Some(syn::parse2::<IdMapping>(list.tokens)?);
           } else {
             return Err(spanned_error!(
               ident,
-              format!("Unknown attribute {ident}. {attributes_error_msg}")
+              format!("Unknown attribute `{ident}`. {attributes_error_msg}")
             ));
           }
         }
@@ -266,10 +298,12 @@ impl<'a> Parse for Attributes<'a> {
     };
 
     if id_mapping.is_none() && name_mapping.is_none() {
-      return Err(error!(
-        input.span(),
-        "At least one between `id_mapping` and `name_mapping` must be specified"
-      ));
+      // Using reasonable defaults in case nothing is selected
+      if default_text_impl() {
+        name_mapping = Some(NameMapping::default())
+      } else {
+        id_mapping = Some(IdMapping::default())
+      };
     }
 
     Ok(Attributes {
