@@ -1,20 +1,148 @@
-use convert_case::Case;
-use quote::{quote, ToTokens};
-use syn::{parse::Parse, punctuated::Punctuated, Error, Expr, Lit, Meta, Path, Token};
-
-use crate::{
-  features::{default_auto_increment, default_map_int, default_skip_check},
-  Check, MappedType, SqlType,
+use convert_case::{Case, Casing};
+use quote::{format_ident, quote, ToTokens};
+use syn::{
+  parse::Parse, punctuated::Punctuated, Error, Expr, Ident, Lit, Meta, MetaNameValue, Path, Token,
 };
+
+use crate::{features::default_skip_check, Check, TokenStream2};
 
 pub struct Attributes<'a> {
   pub table: Option<String>,
   pub column: Option<String>,
-  pub name: Option<String>,
   pub conn: Check,
-  pub case: Option<Case<'a>>,
-  pub sql_type: SqlType,
+  pub case: Case<'a>,
+  pub name_mapping: Option<NameMapping>,
+  pub id_mapping: Option<IdMapping>,
+}
+
+pub struct IdMapping {
+  pub type_path: TokenStream2,
   pub auto_increment: bool,
+  pub rust_type: Ident,
+}
+
+impl Parse for IdMapping {
+  fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+    let mut rust_type: Option<Ident> = None;
+    let mut int_type_path: Option<TokenStream2> = None;
+    let mut auto_increment = false;
+
+    let punctuated_args = Punctuated::<MetaNameValue, Token![,]>::parse_terminated(input)?;
+
+    for arg in punctuated_args {
+      let ident = arg.path.require_ident()?;
+
+      if ident == "type" {
+        let type_path = extract_path(arg.value)?;
+
+        let type_ident = &type_path
+          .segments
+          .last()
+          .ok_or_else(|| spanned_error!(type_path.clone(), "Invalid type path"))?
+          .ident;
+
+        let type_target = if type_ident == "Integer" {
+          "i32"
+        } else if type_ident == "BigInt" {
+          "i64"
+        } else if type_ident == "SmallInt" {
+          "i16"
+        } else if type_ident == "TinyInt" {
+          "i8"
+        } else {
+          return Err(spanned_error!(
+            type_ident,
+            format!("Unknown ID type {type_ident}. Only valid integer types from `diesel::sql_types` are accepted")));
+        };
+
+        rust_type = Some(format_ident!("{type_target}"));
+        int_type_path = Some(type_path.to_token_stream());
+      } else if ident == "auto_increment" {
+        auto_increment = true;
+      } else {
+        return Err(spanned_error!(
+          ident,
+          format!("Unknown attribute `{ident}`. Expected one of: `type`, `auto_increment`")
+        ));
+      }
+    }
+
+    Ok(Self {
+      auto_increment,
+      type_path: int_type_path.unwrap_or_else(|| quote! { diesel::sql_types::Integer }),
+      rust_type: rust_type.unwrap_or_else(|| format_ident!("i32")),
+    })
+  }
+}
+
+pub enum NameTypes {
+  Text,
+  Custom { name: String },
+}
+
+impl NameTypes {
+  pub fn is_custom(&self) -> bool {
+    matches!(self, Self::Custom { .. })
+  }
+}
+
+pub struct NameMapping {
+  pub db_type: NameTypes,
+  pub path: TokenStream2,
+}
+
+impl Parse for NameMapping {
+  fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+    let mut custom_type_path: Option<Path> = None;
+    let mut custom_enum_name: Option<String> = None;
+
+    let punctuated_args = Punctuated::<MetaNameValue, Token![,]>::parse_terminated(input)?;
+
+    for arg in punctuated_args {
+      let ident = arg.path.require_ident()?;
+
+      if ident == "type" {
+        let type_path = extract_path(arg.value)?;
+
+        custom_type_path = Some(type_path);
+      } else if ident == "name" {
+        let db_enum_name = extract_string_lit(&arg.value)?;
+
+        custom_enum_name = Some(db_enum_name);
+      } else {
+        return Err(spanned_error!(
+          ident,
+          format!("Unknown attribute `{ident}`. Expected one of: `type`, `name`")
+        ));
+      }
+    }
+
+    let db_type = if let Some(path) = &custom_type_path {
+      let db_name = if let Some(name) = custom_enum_name {
+        name
+      } else {
+        let rust_type_name = path
+          .segments
+          .last()
+          .ok_or_else(|| spanned_error!(path.clone(), "Invalid path attribute"))?;
+
+        // Falling back to snake cased name of custom type struct
+        rust_type_name.ident.to_string().to_case(Case::Snake)
+      };
+
+      NameTypes::Custom { name: db_name }
+    } else {
+      NameTypes::Text
+    };
+
+    Ok(Self {
+      db_type,
+      path: custom_type_path.map_or_else(
+        || quote! { diesel::sql_types::Text },
+        |t| t.to_token_stream(),
+      ),
+    })
+  }
 }
 
 pub fn extract_string_lit(expr: &Expr) -> Result<String, Error> {
@@ -39,17 +167,30 @@ impl<'a> Parse for Attributes<'a> {
     let mut column: Option<String> = None;
     let mut conn: Option<Check> = None;
     let mut case: Option<Case> = None;
-    let mut sql_type: Option<SqlType> = None;
-    let mut name: Option<String> = None;
-    let mut auto_increment: Option<bool> = None;
+    let mut name_mapping: Option<NameMapping> = None;
+    let mut id_mapping: Option<IdMapping> = None;
 
     let punctuated_args = Punctuated::<Meta, Token![,]>::parse_terminated(input)?;
 
     let attributes_error_msg =
-      "expected one of: <`name` | `table`, `column`>, `conn`, `skip_check`, `case`, `sql_type`, `auto_increment`";
+      "Expected one of: `table`, `column`, `conn`, `skip_check`, `case`, `id_mapping`, `name_mapping`";
 
     for arg in punctuated_args {
       match arg {
+        Meta::List(list) => {
+          let ident = list.path.require_ident()?;
+
+          if ident == "name_mapping" {
+            name_mapping = Some(syn::parse2::<NameMapping>(list.tokens)?);
+          } else if ident == "id_mapping" {
+            id_mapping = Some(syn::parse2::<IdMapping>(list.tokens)?);
+          } else {
+            return Err(spanned_error!(
+              ident,
+              format!("Unknown attribute {ident}. {attributes_error_msg}")
+            ));
+          }
+        }
         Meta::Path(path) => {
           let ident = path.require_ident()?;
 
@@ -61,14 +202,10 @@ impl<'a> Parse for Attributes<'a> {
             }
 
             conn = Some(Check::Skip);
-          } else if ident == "auto_increment" {
-            check_duplicate!(ident, auto_increment);
-
-            auto_increment = Some(true);
           } else {
             return Err(spanned_error!(
               ident,
-              format!("Unknown attribute `{ident}`, {attributes_error_msg}")
+              format!("Unknown attribute `{ident}`. {attributes_error_msg}")
             ));
           }
         }
@@ -91,39 +228,6 @@ impl<'a> Parse for Attributes<'a> {
             };
 
             case = Some(case_value);
-          } else if ident == "name" {
-            check_duplicate!(ident, name);
-
-            name = Some(extract_string_lit(&value)?);
-          } else if ident == "sql_type" {
-            check_duplicate!(ident, sql_type);
-
-            let type_path = extract_path(value)?;
-
-            let type_ident = &type_path
-              .segments
-              .last()
-              .expect("Missing path segments")
-              .ident;
-
-            let type_target = if type_ident == "Text" {
-              MappedType::Text
-            } else if type_ident == "Integer" {
-              MappedType::I32
-            } else if type_ident == "BigInt" {
-              MappedType::I64
-            } else if type_ident == "SmallInt" {
-              MappedType::I16
-            } else if type_ident == "TinyInt" {
-              MappedType::I8
-            } else {
-              MappedType::Custom
-            };
-
-            sql_type = Some(SqlType {
-              db_type: type_target,
-              path: type_path.to_token_stream(),
-            });
           } else if ident == "table" {
             check_duplicate!(ident, table);
 
@@ -147,9 +251,6 @@ impl<'a> Parse for Attributes<'a> {
             ));
           }
         }
-        Meta::List(list) => {
-          return Err(spanned_error!(list, "Expected a path or key-value pair"));
-        }
       };
     }
 
@@ -164,42 +265,20 @@ impl<'a> Parse for Attributes<'a> {
       ));
     };
 
-    let sql_type = if let Some(sql_type) = sql_type {
-      sql_type
-    } else if default_map_int() {
-      SqlType {
-        db_type: MappedType::I32,
-        path: quote! { diesel::sql_types::Integer },
-      }
-    } else {
-      return Err(error!(input.span(), "No `sql_type` has been set"));
-    };
-
-    if let Some(true) = auto_increment && matches!(sql_type.db_type, MappedType::Text | MappedType::Custom) {
+    if id_mapping.is_none() && name_mapping.is_none() {
       return Err(error!(
         input.span(),
-        "Cannot use `auto_increment` when the mapped type is not integer-based"
+        "At least one between `id_mapping` and `name_mapping` must be specified"
       ));
     }
-
-    if name.is_some() && (table.is_some() || column.is_some()) {
-      return Err(error!(
-        input.span(),
-        "`name` cannot be used with `table` or `column`"
-      ));
-    }
-
-    // Only falling back here, in case someone is using the default but overriding it
-    let auto_increment = auto_increment.unwrap_or_else(|| default_auto_increment());
 
     Ok(Attributes {
       table,
       column,
       conn,
-      case,
-      sql_type,
-      auto_increment,
-      name,
+      case: case.unwrap_or(Case::Snake),
+      id_mapping,
+      name_mapping,
     })
   }
 }

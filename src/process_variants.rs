@@ -9,8 +9,8 @@ pub struct VariantData {
 }
 
 pub fn process_variants(
-  variants: Punctuated<Variant, Token![,]>,
-  case: Option<Case>,
+  variants: &Punctuated<Variant, Token![,]>,
+  case: Case,
 ) -> Result<Vec<VariantData>, Error> {
   let mut variants_data: Vec<VariantData> = Vec::new();
 
@@ -19,8 +19,6 @@ pub fn process_variants(
     let mut db_name: Option<String> = None;
     let mut id: Option<i64> = None;
     let mut skip_check = false;
-
-    let i = (i + 1) as i64;
 
     for attr in &variant.attrs {
       if attr.meta.path().is_ident("diesel_enum") {
@@ -47,14 +45,8 @@ pub fn process_variants(
 
     variants_data.push(VariantData {
       ident,
-      db_name: db_name.unwrap_or_else(|| {
-        if let Some(case) = case {
-          variant.ident.to_string().to_case(case)
-        } else {
-          variant.ident.to_string()
-        }
-      }),
-      id: id.unwrap_or(i),
+      db_name: db_name.unwrap_or_else(|| variant.ident.to_string().to_case(case)),
+      id: id.unwrap_or((i + 1) as i64),
       skip_check,
     });
   }
