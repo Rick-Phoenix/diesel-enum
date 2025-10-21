@@ -168,16 +168,6 @@ pub fn diesel_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
 
       enum_copy.ident = target_enum_name;
 
-      // enum_copy
-      //   .attrs
-      //   .retain(|att| !att.path().is_ident("diesel_enum"));
-
-      for variant in enum_copy.variants.iter_mut() {
-        variant
-          .attrs
-          .retain(|att| !att.path().is_ident("diesel_enum"));
-      }
-
       enum_impls.extend(quote! {
         #[derive(Debug, diesel_enum_checked::MappedEnum, diesel::deserialize::FromSqlRow, diesel::expression::AsExpression)]
         #[diesel(sql_type = #sql_type_path)]
