@@ -1,0 +1,21 @@
+[package]
+name = "tests"
+publish = false
+edition = "2024"
+
+[dev-dependencies]
+owo-colors = "4"
+
+[dependencies]
+diesel-enum-checked = { path = "..", features = [
+  "async-tests",
+  "pretty-test-errors",
+] }
+deadpool-diesel = { version = "0.6", features = ["sqlite", "rt_tokio_1"] }
+deadpool-sync = "0.1.4"
+dotenvy = "0.15"
+diesel = { version = "2.3", features = [
+  "sqlite",
+  "returning_clauses_for_sqlite_3_35",
+] }
+tokio = { version = "1", features = ["full"] }
