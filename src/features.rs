@@ -21,3 +21,7 @@ pub fn async_tests() -> bool {
 pub fn pretty_test_errors() -> bool {
   cfg!(feature = "pretty-test-errors")
 }
+
+pub fn default_conn_function_path() -> bool {
+  cfg!(feature = "default-conn-function-path")
+}

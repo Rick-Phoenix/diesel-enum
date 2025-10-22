@@ -8,7 +8,8 @@ use syn::{
 
 use crate::{
   features::{
-    default_name_mapping, default_skip_consistency_check, default_skip_test, no_default_id_mapping,
+    default_conn_function_path, default_name_mapping, default_skip_consistency_check,
+    default_skip_test, no_default_id_mapping,
   },
   Check, TokenStream2,
 };
@@ -419,7 +420,7 @@ impl<'a> Parse for Attributes<'a> {
               ));
             }
 
-            conn = Some(Check::Conn(extract_path(value)?));
+            conn = Some(Check::Conn(extract_path(value)?.to_token_stream()));
           } else {
             return Err(spanned_error!(
               ident,
@@ -434,6 +435,8 @@ impl<'a> Parse for Attributes<'a> {
       input
     } else if default_skip_consistency_check() {
       Check::Skip
+    } else if default_conn_function_path() {
+      Check::Conn(quote! { crate::db_enum_test_func::get_connection })
     } else {
       return Err(error!(
         input.span(),

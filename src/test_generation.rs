@@ -1,6 +1,6 @@
 use convert_case::{Case, Casing};
 use quote::{format_ident, quote};
-use syn::{Ident, Path};
+use syn::Ident;
 
 use crate::{
   attributes::NameTypes,
@@ -14,7 +14,7 @@ pub fn test_with_id(
   table_name: &str,
   column_name: &str,
   id_rust_type: &Ident,
-  conn_callback: &Path,
+  conn_callback: &TokenStream2,
   variants_data: &[VariantData],
   skip_test: bool,
 ) -> TokenStream2 {
@@ -211,7 +211,7 @@ pub fn test_without_id(
   table_name: &str,
   column_name: &str,
   db_type: &NameTypes,
-  conn_callback: &Path,
+  conn_callback: &TokenStream2,
   variants_data: &[VariantData],
   skip_test: bool,
 ) -> TokenStream2 {

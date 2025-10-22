@@ -13,7 +13,7 @@ use convert_case::{Case, Casing};
 use proc_macro::TokenStream;
 pub(crate) use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
-use syn::{parse_macro_input, Error, ItemEnum, Path};
+use syn::{parse_macro_input, Error, ItemEnum};
 
 use crate::{
   attributes::{Attributes, IdMapping, NameMapping},
@@ -25,7 +25,7 @@ use crate::{
 };
 
 enum Check {
-  Conn(Path),
+  Conn(TokenStream2),
   Skip,
 }
 
