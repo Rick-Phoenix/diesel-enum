@@ -1,5 +1,5 @@
-pub fn default_skip_check() -> bool {
-  cfg!(feature = "default-skip-check")
+pub fn default_skip_consistency_check() -> bool {
+  cfg!(feature = "default-skip-consistency-check")
 }
 
 pub fn default_skip_test() -> bool {

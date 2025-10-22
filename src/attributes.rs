@@ -3,7 +3,9 @@ use quote::{format_ident, quote, ToTokens};
 use syn::{parse::Parse, punctuated::Punctuated, Error, Expr, Ident, Lit, Meta, Path, Token};
 
 use crate::{
-  features::{default_name_mapping, default_skip_check, default_skip_test, no_default_id_mapping},
+  features::{
+    default_name_mapping, default_skip_consistency_check, default_skip_test, no_default_id_mapping,
+  },
   Check, TokenStream2,
 };
 
@@ -261,18 +263,14 @@ impl<'a> Parse for Attributes<'a> {
     let punctuated_args = Punctuated::<Meta, Token![,]>::parse_terminated(input)?;
 
     let attributes_error_msg =
-      "Expected one of: `table`, `column`, `conn`, `skip_check`, `skip_test`, `case`, `id_mapping`, `name_mapping`";
+      "Expected one of: `table`, `column`, `conn`, `skip_consistency_check`, `skip_test`, `case`, `id_mapping`, `name_mapping`";
 
     for arg in punctuated_args {
       match arg {
         Meta::List(list) => {
           let ident = list.path.require_ident()?;
 
-          if ident == "skip_test" {
-            check_duplicate!(ident, skip_test);
-
-            skip_test = Some(true);
-          } else if ident == "name_mapping" {
+          if ident == "name_mapping" {
             check_duplicate!(ident, name_mapping);
 
             let parse_result = syn::parse2::<NameMappingOrSkip>(list.tokens)?;
@@ -294,14 +292,21 @@ impl<'a> Parse for Attributes<'a> {
         Meta::Path(path) => {
           let ident = path.require_ident()?;
 
-          if ident == "skip_check" {
-            check_duplicate!(ident, conn, "skip_check");
+          if ident == "skip_consistency_check" {
+            check_duplicate!(ident, conn, "skip_consistency_check");
 
             if matches!(conn, Some(Check::Conn(_))) {
-              return Err(spanned_error!(ident, "Cannot use `conn` with `skip_check`"));
+              return Err(spanned_error!(
+                ident,
+                "Cannot use `conn` with `skip_consistency_check`"
+              ));
             }
 
             conn = Some(Check::Skip);
+          } else if ident == "skip_test" {
+            check_duplicate!(ident, skip_test);
+
+            skip_test = Some(true);
           } else {
             return Err(spanned_error!(
               ident,
@@ -340,7 +345,10 @@ impl<'a> Parse for Attributes<'a> {
             check_duplicate!(ident, conn);
 
             if matches!(conn, Some(Check::Skip)) {
-              return Err(spanned_error!(ident, "Cannot use `conn` with `skip_check`"));
+              return Err(spanned_error!(
+                ident,
+                "Cannot use `conn` with `skip_consistency_check`"
+              ));
             }
 
             conn = Some(Check::Conn(extract_path(value)?));
@@ -356,12 +364,12 @@ impl<'a> Parse for Attributes<'a> {
 
     let conn = if let Some(input) = conn {
       input
-    } else if default_skip_check() {
+    } else if default_skip_consistency_check() {
       Check::Skip
     } else {
       return Err(error!(
         input.span(),
-        "At least one between `conn` and `skip_check` must be present"
+        "At least one between `conn` and `skip_consistency_check` must be present"
       ));
     };
 
