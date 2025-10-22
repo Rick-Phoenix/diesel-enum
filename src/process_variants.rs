@@ -5,7 +5,6 @@ pub struct VariantData {
   pub ident: Ident,
   pub db_name: String,
   pub id: i64,
-  pub skip_check: bool,
 }
 
 pub fn process_variants(
@@ -18,7 +17,6 @@ pub fn process_variants(
     let ident = variant.ident.clone();
     let mut db_name: Option<String> = None;
     let mut id: Option<i64> = None;
-    let mut skip_check = false;
 
     for attr in &variant.attrs {
       if attr.meta.path().is_ident("db_mapping") {
@@ -30,12 +28,8 @@ pub fn process_variants(
             let val = meta.value()?;
 
             db_name = Some(val.parse::<LitStr>()?.value());
-          } else if meta.path.is_ident("skip_check") {
-            skip_check = true;
           } else {
-            return Err(
-              meta.error("Unknown attribute. Allowed attributes are: [ id, name, skip_check ]"),
-            );
+            return Err(meta.error("Unknown attribute. Allowed attributes are: [ id, name ]"));
           }
 
           Ok(())
@@ -47,7 +41,6 @@ pub fn process_variants(
       ident,
       db_name: db_name.unwrap_or_else(|| variant.ident.to_string().to_case(case)),
       id: id.unwrap_or((i + 1) as i64),
-      skip_check,
     });
   }
 

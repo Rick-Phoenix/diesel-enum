@@ -29,14 +29,12 @@ pub fn test_with_id(
     let variants_map_ident = format_ident!("map");
 
     for variant in variants_data {
-      if !variant.skip_check {
-        let db_name = &variant.db_name;
-        let variant_ident = &variant.ident;
+      let db_name = &variant.db_name;
+      let variant_ident = &variant.ident;
 
-        collection_tokens.extend(quote! {
-          #variants_map_ident.insert(#db_name, #enum_name::#variant_ident.into());
-        });
-      }
+      collection_tokens.extend(quote! {
+        #variants_map_ident.insert(#db_name, #enum_name::#variant_ident.into());
+      });
     }
 
     quote! {
@@ -247,13 +245,7 @@ pub fn test_without_id(
 
   let test_mod_name = format_ident!("__diesel_enum_test_{}", enum_name_str.to_case(Case::Snake));
 
-  let variant_db_names = variants_data.iter().filter_map(|data| {
-    if !data.skip_check {
-      Some(&data.db_name)
-    } else {
-      None
-    }
-  });
+  let variant_db_names = variants_data.iter().map(|data| &data.db_name);
 
   let source_type = if is_custom { "enum" } else { "column" };
 
