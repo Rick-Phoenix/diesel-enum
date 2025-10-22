@@ -48,6 +48,7 @@ pub fn diesel_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
   let orig_input: TokenStream2 = input.clone().into();
 
   let Attributes {
+    skip_test,
     table,
     column,
     conn,
@@ -97,12 +98,14 @@ pub fn diesel_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
 
     if let Check::Conn(connection_func) = &conn && id_mapping.is_none() {
       let test_impl = test_without_id(
+        &enum_name,
         &enum_name_str,
         &table_name,
         &column_name,
         &db_type,
         &connection_func,
         &variants_data,
+        skip_test,
       );
 
       enum_impls.extend(test_impl);
@@ -146,6 +149,7 @@ pub fn diesel_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
         &rust_type,
         &connection_func,
         &variants_data,
+        skip_test,
       );
 
       enum_impls.extend(test_impl);

@@ -2,6 +2,10 @@ pub fn default_skip_check() -> bool {
   cfg!(feature = "default-skip-check")
 }
 
+pub fn default_skip_test() -> bool {
+  cfg!(feature = "default-skip-test")
+}
+
 pub fn default_name_mapping() -> bool {
   cfg!(feature = "default-name-mapping")
 }

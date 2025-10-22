@@ -3,7 +3,7 @@ use quote::{format_ident, quote, ToTokens};
 use syn::{parse::Parse, punctuated::Punctuated, Error, Expr, Ident, Lit, Meta, Path, Token};
 
 use crate::{
-  features::{default_name_mapping, default_skip_check, no_default_id_mapping},
+  features::{default_name_mapping, default_skip_check, default_skip_test, no_default_id_mapping},
   Check, TokenStream2,
 };
 
@@ -11,6 +11,7 @@ pub struct Attributes<'a> {
   pub table: Option<String>,
   pub column: Option<String>,
   pub conn: Check,
+  pub skip_test: bool,
   pub case: Case<'a>,
   pub name_mapping: Option<NameMapping>,
   pub id_mapping: Option<IdMapping>,
@@ -255,18 +256,23 @@ impl<'a> Parse for Attributes<'a> {
     let mut case: Option<Case> = None;
     let mut name_mapping: Option<NameMappingOrSkip> = None;
     let mut id_mapping: Option<IdMappingOrSkip> = None;
+    let mut skip_test: Option<bool> = None;
 
     let punctuated_args = Punctuated::<Meta, Token![,]>::parse_terminated(input)?;
 
     let attributes_error_msg =
-      "Expected one of: `table`, `column`, `conn`, `skip_check`, `case`, `id_mapping`, `name_mapping`";
+      "Expected one of: `table`, `column`, `conn`, `skip_check`, `skip_test`, `case`, `id_mapping`, `name_mapping`";
 
     for arg in punctuated_args {
       match arg {
         Meta::List(list) => {
           let ident = list.path.require_ident()?;
 
-          if ident == "name_mapping" {
+          if ident == "skip_test" {
+            check_duplicate!(ident, skip_test);
+
+            skip_test = Some(true);
+          } else if ident == "name_mapping" {
             check_duplicate!(ident, name_mapping);
 
             let parse_result = syn::parse2::<NameMappingOrSkip>(list.tokens)?;
@@ -388,6 +394,7 @@ impl<'a> Parse for Attributes<'a> {
       case: case.unwrap_or(Case::Snake),
       id_mapping,
       name_mapping,
+      skip_test: skip_test.unwrap_or_else(|| default_skip_test()),
     })
   }
 }
