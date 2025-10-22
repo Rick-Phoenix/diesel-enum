@@ -384,3 +384,23 @@ pub fn test_without_id(
     }
   }
 }
+
+pub fn check_consistency_call(enum_name: &Ident) -> TokenStream2 {
+  let (async_fn, await_call) = if async_tests() {
+    (Some(quote! { async }), Some(quote! { .await }))
+  } else {
+    (None, None)
+  };
+
+  let id_enum = format_ident!("{enum_name}Id");
+
+  quote! {
+    #[cfg(test)]
+    impl #enum_name {
+      #[track_caller]
+      pub #async_fn fn check_consistency() {
+        #id_enum::check_consistency()#await_call
+      }
+    }
+  }
+}

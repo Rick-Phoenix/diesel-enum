@@ -21,7 +21,7 @@ use crate::{
     enum_int_conversions, enum_to_enum_conversion, sql_int_conversions, sql_string_conversions,
   },
   process_variants::{process_variants, VariantData},
-  test_generation::{test_with_id, test_without_id},
+  test_generation::{check_consistency_call, test_with_id, test_without_id},
 };
 
 enum Check {
@@ -102,18 +102,22 @@ pub fn diesel_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
 
     enum_impls.extend(sql_string_conversions);
 
-    if let Check::Conn(connection_func) = &conn && id_mapping.is_none() {
-      let test_impl = test_without_id(
-        &enum_name,
-        &enum_name_str,
-        &table_path,
-        &table_name,
-        &column_name,
-        &db_type,
-        &connection_func,
-        &variants_data,
-        skip_test,
-      );
+    if let Check::Conn(connection_func) = &conn {
+      let test_impl = if id_mapping.is_none() {
+        test_without_id(
+          &enum_name,
+          &enum_name_str,
+          &table_path,
+          &table_name,
+          &column_name,
+          &db_type,
+          &connection_func,
+          &variants_data,
+          skip_test,
+        )
+      } else {
+        check_consistency_call(&enum_name)
+      };
 
       enum_impls.extend(test_impl);
     }
