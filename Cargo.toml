@@ -21,5 +21,6 @@ proc-macro = true
 
 [features]
 default-skip-check = []
-default-text-impl = []
-no-default-int-impl = []
+default-name-mapping = []
+no-default-id-mapping = []
+async-tests = []
