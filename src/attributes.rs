@@ -1,6 +1,10 @@
+use std::ops::Range;
+
 use convert_case::{Case, Casing};
 use quote::{format_ident, quote, ToTokens};
-use syn::{parse::Parse, punctuated::Punctuated, Error, Expr, Ident, Lit, Meta, Path, Token};
+use syn::{
+  parse::Parse, punctuated::Punctuated, Error, Expr, Ident, Lit, Meta, Path, RangeLimits, Token,
+};
 
 use crate::{
   features::{
@@ -17,6 +21,7 @@ pub struct Attributes<'a> {
   pub case: Case<'a>,
   pub name_mapping: Option<NameMapping>,
   pub id_mapping: Option<IdMapping>,
+  pub skip_ranges: Vec<Range<i32>>,
 }
 
 pub struct IdMapping {
@@ -41,6 +46,54 @@ enum IdMappingOrSkip {
 impl Default for IdMappingOrSkip {
   fn default() -> Self {
     Self::IdMapping(IdMapping::default())
+  }
+}
+
+struct SkippedRanges {
+  pub ranges: Vec<Range<i32>>,
+}
+
+impl Parse for SkippedRanges {
+  fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+    let mut ranges: Vec<Range<i32>> = Vec::new();
+
+    let items = Punctuated::<Expr, Token![,]>::parse_terminated(input)?;
+
+    for item in items {
+      if let Expr::Range(range_expr) = &item {
+        let start = if let Some(start_expr) = &range_expr.start {
+          extract_i32(&start_expr)?
+        } else {
+          0
+        };
+
+        let end = if let Some(end_expr) = &range_expr.end {
+          extract_i32(&end_expr)?
+        } else {
+          return Err(spanned_error!(
+            range_expr,
+            "Infinite range is not supported"
+          ));
+        };
+
+        let final_end = if let RangeLimits::HalfOpen(_) = &range_expr.limits {
+          end
+        } else {
+          end + 1
+        };
+
+        ranges.push(start..final_end);
+      } else {
+        return Err(spanned_error!(
+          item,
+          "Expected a range (e.g. `1..5`, `10..=15`)"
+        ));
+      }
+    }
+
+    ranges.sort_by_key(|range| range.start);
+
+    Ok(Self { ranges })
   }
 }
 
@@ -242,6 +295,14 @@ pub fn extract_string_lit(expr: &Expr) -> Result<String, Error> {
   }
 }
 
+pub fn extract_i32(expr: &Expr) -> Result<i32, Error> {
+  if let Expr::Lit(expr_lit) = expr && let Lit::Int(value) = &expr_lit.lit {
+    Ok(value.base10_parse()?)
+  } else {
+    Err(spanned_error!(expr, "Expected an integer literal"))
+  }
+}
+
 pub fn extract_path(expr: Expr) -> Result<Path, Error> {
   if let Expr::Path(expr_path) = expr {
     Ok(expr_path.path)
@@ -259,18 +320,25 @@ impl<'a> Parse for Attributes<'a> {
     let mut name_mapping: Option<NameMappingOrSkip> = None;
     let mut id_mapping: Option<IdMappingOrSkip> = None;
     let mut skip_test: Option<bool> = None;
+    let mut skip_ids: Option<Vec<Range<i32>>> = None;
 
     let punctuated_args = Punctuated::<Meta, Token![,]>::parse_terminated(input)?;
 
     let attributes_error_msg =
-      "Expected one of: `table`, `column`, `conn`, `skip_consistency_check`, `skip_test`, `case`, `id_mapping`, `name_mapping`";
+      "Expected one of: `table`, `column`, `conn`, `skip_consistency_check`, `skip_ids`, `skip_test`, `case`, `id_mapping`, `name_mapping`";
 
     for arg in punctuated_args {
       match arg {
         Meta::List(list) => {
           let ident = list.path.require_ident()?;
 
-          if ident == "name_mapping" {
+          if ident == "skip_ids" {
+            check_duplicate!(ident, skip_ids);
+
+            let ranges = list.parse_args::<SkippedRanges>()?;
+
+            skip_ids = Some(ranges.ranges);
+          } else if ident == "name_mapping" {
             check_duplicate!(ident, name_mapping);
 
             let parse_result = syn::parse2::<NameMappingOrSkip>(list.tokens)?;
@@ -403,6 +471,7 @@ impl<'a> Parse for Attributes<'a> {
       id_mapping,
       name_mapping,
       skip_test: skip_test.unwrap_or_else(|| default_skip_test()),
+      skip_ranges: skip_ids.unwrap_or_default(),
     })
   }
 }

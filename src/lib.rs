@@ -55,11 +55,12 @@ pub fn diesel_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
     case,
     name_mapping,
     id_mapping,
+    skip_ranges,
   } = parse_macro_input!(attrs as Attributes);
 
   let ast = parse_macro_input!(input as ItemEnum);
 
-  let variants_data = match process_variants(&ast.variants, case) {
+  let variants_data = match process_variants(&ast.variants, case, &skip_ranges) {
     Ok(data) => data,
     Err(e) => return e.to_compile_error().into(),
   };

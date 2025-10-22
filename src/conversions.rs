@@ -4,44 +4,6 @@ use syn::{Ident, LitInt};
 
 use crate::{traverse_enum, TokenStream2, VariantData};
 
-pub fn enum_to_enum_conversion(enum_name: &Ident, variants_data: &[VariantData]) -> TokenStream2 {
-  let id_enum = format_ident!("{enum_name}Id");
-
-  let from_text_enum = traverse_enum(variants_data, |variant| {
-    let variant_ident = &variant.ident;
-
-    quote! {
-      #enum_name::#variant_ident => #id_enum::#variant_ident,
-    }
-  });
-
-  let from_id_enum = traverse_enum(variants_data, |variant| {
-    let variant_ident = &variant.ident;
-
-    quote! {
-      #id_enum::#variant_ident => #enum_name::#variant_ident,
-    }
-  });
-
-  quote! {
-    impl From<#enum_name> for #id_enum {
-      fn from(value: #enum_name) -> Self {
-        match value {
-          #from_text_enum
-        }
-      }
-    }
-
-    impl From<#id_enum> for #enum_name {
-      fn from(value: #id_enum) -> Self {
-        match value {
-          #from_id_enum
-        }
-      }
-    }
-  }
-}
-
 pub fn enum_int_conversions(
   enum_name: &Ident,
   rust_type: &Ident,
@@ -173,6 +135,44 @@ pub fn sql_string_conversions(
       fn to_sql<'b>(&'b self, out: &mut diesel::serialize::Output<'b, '_, DB>) -> diesel::serialize::Result {
         match self {
           #conversion_to_str
+        }
+      }
+    }
+  }
+}
+
+pub fn enum_to_enum_conversion(enum_name: &Ident, variants_data: &[VariantData]) -> TokenStream2 {
+  let id_enum = format_ident!("{enum_name}Id");
+
+  let from_text_enum = traverse_enum(variants_data, |variant| {
+    let variant_ident = &variant.ident;
+
+    quote! {
+      #enum_name::#variant_ident => #id_enum::#variant_ident,
+    }
+  });
+
+  let from_id_enum = traverse_enum(variants_data, |variant| {
+    let variant_ident = &variant.ident;
+
+    quote! {
+      #id_enum::#variant_ident => #enum_name::#variant_ident,
+    }
+  });
+
+  quote! {
+    impl From<#enum_name> for #id_enum {
+      fn from(value: #enum_name) -> Self {
+        match value {
+          #from_text_enum
+        }
+      }
+    }
+
+    impl From<#id_enum> for #enum_name {
+      fn from(value: #id_enum) -> Self {
+        match value {
+          #from_id_enum
         }
       }
     }
