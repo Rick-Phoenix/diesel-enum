@@ -21,7 +21,7 @@ use crate::{
     enum_int_conversions, enum_to_enum_conversion, sql_int_conversions, sql_string_conversions,
   },
   process_variants::{process_variants, VariantData},
-  test_generation::{check_consistency_call, test_with_id, test_without_id},
+  test_generation::{check_consistency_inter_call, test_with_id, test_without_id},
 };
 
 enum Check {
@@ -116,7 +116,7 @@ pub fn diesel_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
           skip_test,
         )
       } else {
-        check_consistency_call(&enum_name)
+        check_consistency_inter_call(&enum_name)
       };
 
       enum_impls.extend(test_impl);

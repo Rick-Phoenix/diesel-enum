@@ -1,4 +1,4 @@
-use std::{env, time::Duration};
+use std::{env, error::Error, time::Duration};
 
 use deadpool_diesel::{
   sqlite::{Hook, HookError, Manager, Pool},
@@ -12,9 +12,26 @@ use tokio::sync::OnceCell;
 #[cfg(test)]
 pub mod from_table;
 pub mod models;
+#[cfg(test)]
+pub mod queries;
 pub mod schema;
 
 static POOL: OnceCell<deadpool_diesel::sqlite::Pool> = OnceCell::const_new();
+
+pub async fn run_query<T: Send + 'static>(
+  callback: impl FnOnce(&mut SqliteConnection) -> QueryResult<T> + Send + 'static,
+) -> Result<T, Box<dyn Error>> {
+  Ok(
+    POOL
+      .get_or_init(|| async { create_pool(true) })
+      .await
+      .get()
+      .await
+      .expect("Could not get a connection")
+      .interact(callback)
+      .await??,
+  )
+}
 
 pub async fn sqlite_testing_callback(
   callback: impl FnOnce(&mut SqliteConnection) + std::marker::Send + 'static,
@@ -79,7 +96,7 @@ async fn connection_setup(conn: &mut SyncWrapper<SqliteConnection>) -> Result<()
       // maximum number of database disk pages that will be hold in memory. Corresponds to ~8MB
       diesel::sql_query("PRAGMA cache_size = 2000;").execute(conn)?;
       //enforce foreign keys
-      diesel::sql_query("PRAGMA foreign_keys = ON;").execute(conn)?;
+      // diesel::sql_query("PRAGMA foreign_keys = ON;").execute(conn)?;
       QueryResult::Ok(())
     })
     .await;

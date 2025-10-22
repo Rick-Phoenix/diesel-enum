@@ -40,18 +40,18 @@ pub struct ImageData {
   pub pokemon_id: i32,
 }
 
-#[derive(Queryable, Identifiable, Associations, Insertable)]
+#[derive(Queryable, Associations, Insertable)]
 #[diesel(belongs_to(Pokemon))]
 #[diesel(belongs_to(Type))]
 #[diesel(primary_key(pokemon_id, type_id))]
 #[diesel(table_name = pokemon_types)]
 pub struct PokemonType {
   pub pokemon_id: i32,
-  pub type_id: i32,
+  pub type_id: TypesId,
 }
 
-#[derive(Clone)]
 #[diesel_enum(conn = crate::sqlite_testing_callback, name_mapping(default), case = "PascalCase", id_mapping(default))]
+#[derive(Clone, PartialEq, Eq)]
 pub enum Types {
   Grass,
   Poison,

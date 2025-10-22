@@ -385,7 +385,7 @@ pub fn test_without_id(
   }
 }
 
-pub fn check_consistency_call(enum_name: &Ident) -> TokenStream2 {
+pub fn check_consistency_inter_call(enum_name: &Ident) -> TokenStream2 {
   let (async_fn, await_call) = if async_tests() {
     (Some(quote! { async }), Some(quote! { .await }))
   } else {
