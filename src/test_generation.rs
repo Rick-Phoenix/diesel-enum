@@ -12,7 +12,6 @@ pub fn test_with_id(
   id_rust_type: &Ident,
   connection_func: &Path,
   variants_data: &[VariantData],
-  conversion_method: Option<TokenStream2>,
 ) -> TokenStream2 {
   let table_name_ident = format_ident!("{table_name}");
   let column_name_ident = format_ident!("{column_name}");
@@ -25,19 +24,13 @@ pub fn test_with_id(
 
     let variants_map_ident = format_ident!("map");
 
-    let conversion_method = conversion_method.unwrap_or_else(|| {
-      quote! {
-        <#enum_name as Into<#id_rust_type>>::into
-      }
-    });
-
     for variant in variants_data {
       if !variant.skip_check {
         let db_name = &variant.db_name;
         let variant_ident = &variant.ident;
 
         collection_tokens.extend(quote! {
-          #variants_map_ident.insert(#db_name, #conversion_method(#enum_name::#variant_ident));
+          #variants_map_ident.insert(#db_name, #enum_name::#variant_ident.into());
         });
       }
     }

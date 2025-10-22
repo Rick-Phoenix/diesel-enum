@@ -111,7 +111,6 @@ pub fn diesel_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
 
   if let Some(IdMapping {
     type_path: sql_type_path,
-    conversion_method,
     rust_type,
   }) = id_mapping
   {
@@ -134,11 +133,9 @@ pub fn diesel_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
 
     enum_impls.extend(int_to_from_sql);
 
-    if conversion_method.is_none() {
-      let int_conversion = enum_int_conversions(&target_enum_name, &rust_type, &variants_data);
+    let int_conversion = enum_int_conversions(&target_enum_name, &rust_type, &variants_data);
 
-      enum_impls.extend(int_conversion);
-    }
+    enum_impls.extend(int_conversion);
 
     if let Check::Conn(connection_func) = &conn {
       let test_impl = test_with_id(
@@ -149,7 +146,6 @@ pub fn diesel_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
         &rust_type,
         &connection_func,
         &variants_data,
-        conversion_method,
       );
 
       enum_impls.extend(test_impl);

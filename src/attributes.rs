@@ -18,7 +18,6 @@ pub struct Attributes<'a> {
 
 pub struct IdMapping {
   pub type_path: TokenStream2,
-  pub conversion_method: Option<TokenStream2>,
   pub rust_type: Ident,
 }
 
@@ -26,7 +25,6 @@ impl Default for IdMapping {
   fn default() -> Self {
     Self {
       type_path: quote! { diesel::sql_types::Integer },
-      conversion_method: None,
       rust_type: format_ident!("i32"),
     }
   }
@@ -36,7 +34,6 @@ impl Parse for IdMapping {
   fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
     let mut rust_type: Option<Ident> = None;
     let mut int_type_path: Option<TokenStream2> = None;
-    let mut conversion_method: Option<TokenStream2> = None;
 
     let punctuated_args = Punctuated::<Meta, Token![,]>::parse_terminated(input)?;
 
@@ -83,23 +80,15 @@ impl Parse for IdMapping {
 
         rust_type = Some(format_ident!("{type_target}"));
         int_type_path = Some(type_path.to_token_stream());
-      } else if ident == "conversion_method" {
-        check_duplicate!(ident, conversion_method);
-
-        conversion_method =
-          Some(extract_path(arg.require_name_value()?.value.clone())?.to_token_stream());
       } else {
         return Err(spanned_error!(
           ident,
-          format!(
-            "Unknown attribute `{ident}`. Expected one of: `default`, `type`, `conversion_method`"
-          )
+          format!("Unknown attribute `{ident}`. Expected one of: `default`, `type`")
         ));
       }
     }
 
     Ok(Self {
-      conversion_method,
       type_path: int_type_path.unwrap_or_else(|| quote! { diesel::sql_types::Integer }),
       rust_type: rust_type.unwrap_or_else(|| format_ident!("i32")),
     })
