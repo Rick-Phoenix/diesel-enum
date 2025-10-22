@@ -51,7 +51,6 @@ pub struct PokemonType {
 }
 
 #[diesel_enum(conn = crate::sqlite_testing_callback, name_mapping(default), case = "PascalCase", id_mapping(default))]
-#[derive(Clone, PartialEq, Eq)]
 pub enum Types {
   Grass,
   Poison,

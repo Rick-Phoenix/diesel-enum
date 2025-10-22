@@ -93,7 +93,7 @@ pub fn diesel_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
   }) = &name_mapping
   {
     enum_impls.extend(quote! {
-      #[derive(diesel_enum_checked::MappedEnum, Debug, diesel::deserialize::FromSqlRow, diesel::expression::AsExpression)]
+      #[derive(PartialEq, Eq, Clone, Copy, Hash, diesel_enum_checked::MappedEnum, Debug, diesel::deserialize::FromSqlRow, diesel::expression::AsExpression)]
       #[diesel(sql_type = #sql_type_path)]
       #orig_input
     });
@@ -169,7 +169,7 @@ pub fn diesel_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
 
     if !has_double_mapping {
       enum_impls.extend(quote! {
-        #[derive(Debug, diesel_enum_checked::MappedEnum, diesel::deserialize::FromSqlRow, diesel::expression::AsExpression)]
+        #[derive(PartialEq, Eq, Clone, Copy, Hash, Debug, diesel_enum_checked::MappedEnum, diesel::deserialize::FromSqlRow, diesel::expression::AsExpression)]
         #[diesel(sql_type = #sql_type_path)]
         #orig_input
       });
@@ -181,7 +181,7 @@ pub fn diesel_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
       enum_copy.ident = target_enum_name;
 
       enum_impls.extend(quote! {
-        #[derive(Debug, diesel_enum_checked::MappedEnum, diesel::deserialize::FromSqlRow, diesel::expression::AsExpression)]
+        #[derive(PartialEq, Eq, Clone, Copy, Hash, Debug, diesel_enum_checked::MappedEnum, diesel::deserialize::FromSqlRow, diesel::expression::AsExpression)]
         #[diesel(sql_type = #sql_type_path)]
         #enum_copy
 
