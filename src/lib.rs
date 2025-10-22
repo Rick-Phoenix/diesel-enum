@@ -48,8 +48,9 @@ pub fn diesel_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
   let orig_input: TokenStream2 = input.clone().into();
 
   let Attributes {
+    table_path,
     skip_test,
-    table,
+    table_name,
     column,
     conn,
     case,
@@ -68,7 +69,11 @@ pub fn diesel_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
   let enum_name = &ast.ident;
   let enum_name_str = enum_name.to_string();
 
-  let table_name = table.unwrap_or_else(|| enum_name_str.to_case(Case::Snake));
+  let table_name = table_name.unwrap_or_else(|| enum_name_str.to_case(Case::Snake));
+  let table_path = table_path.unwrap_or_else(|| {
+    let table_name_ident = format_ident!("{table_name}");
+    quote! { crate::schema::#table_name_ident }
+  });
   let column_name = column.as_deref().unwrap_or_else(|| "name");
 
   let mut enum_impls = TokenStream2::new();
@@ -101,6 +106,7 @@ pub fn diesel_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
       let test_impl = test_without_id(
         &enum_name,
         &enum_name_str,
+        &table_path,
         &table_name,
         &column_name,
         &db_type,
@@ -145,6 +151,7 @@ pub fn diesel_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
       let test_impl = test_with_id(
         &target_enum_name,
         &target_enum_str,
+        &table_path,
         &table_name,
         &column_name,
         &rust_type,

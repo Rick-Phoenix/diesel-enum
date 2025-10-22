@@ -15,7 +15,8 @@ use crate::{
 };
 
 pub struct Attributes<'a> {
-  pub table: Option<String>,
+  pub table_path: Option<TokenStream2>,
+  pub table_name: Option<String>,
   pub column: Option<String>,
   pub conn: Check,
   pub skip_test: bool,
@@ -314,7 +315,8 @@ pub fn extract_path(expr: Expr) -> Result<Path, Error> {
 
 impl<'a> Parse for Attributes<'a> {
   fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-    let mut table: Option<String> = None;
+    let mut table_name: Option<String> = None;
+    let mut table_path: Option<TokenStream2> = None;
     let mut column: Option<String> = None;
     let mut conn: Option<Check> = None;
     let mut case: Option<Case> = None;
@@ -326,7 +328,7 @@ impl<'a> Parse for Attributes<'a> {
     let punctuated_args = Punctuated::<Meta, Token![,]>::parse_terminated(input)?;
 
     let attributes_error_msg =
-      "Expected one of: `table`, `column`, `conn`, `skip_consistency_check`, `skip_ids`, `skip_test`, `case`, `id_mapping`, `name_mapping`";
+      "Expected one of: `table_name`, `table`, `column`, `conn`, `skip_consistency_check`, `skip_ids`, `skip_test`, `case`, `id_mapping`, `name_mapping`";
 
     for arg in punctuated_args {
       match arg {
@@ -387,7 +389,11 @@ impl<'a> Parse for Attributes<'a> {
           let ident = arg.path.require_ident()?;
           let value = arg.value;
 
-          if ident == "case" {
+          if ident == "table" {
+            check_duplicate!(ident, table_path, "table");
+
+            table_path = Some(extract_path(value)?.to_token_stream());
+          } else if ident == "case" {
             check_duplicate!(ident, case);
 
             let case_value = match extract_string_lit(&value)?.as_str()  {
@@ -402,10 +408,10 @@ impl<'a> Parse for Attributes<'a> {
             };
 
             case = Some(case_value);
-          } else if ident == "table" {
-            check_duplicate!(ident, table);
+          } else if ident == "table_name" {
+            check_duplicate!(ident, table_name);
 
-            table = Some(extract_string_lit(&value)?);
+            table_name = Some(extract_string_lit(&value)?);
           } else if ident == "column" {
             check_duplicate!(ident, column);
 
@@ -467,7 +473,8 @@ impl<'a> Parse for Attributes<'a> {
     };
 
     Ok(Attributes {
-      table,
+      table_name,
+      table_path,
       column,
       conn,
       case: case.unwrap_or(Case::Snake),

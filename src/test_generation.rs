@@ -11,6 +11,7 @@ use crate::{
 pub fn test_with_id(
   enum_name: &Ident,
   enum_name_str: &str,
+  table_path: &TokenStream2,
   table_name: &str,
   column_name: &str,
   id_rust_type: &Ident,
@@ -18,7 +19,6 @@ pub fn test_with_id(
   variants_data: &[VariantData],
   skip_test: bool,
 ) -> TokenStream2 {
-  let table_name_ident = format_ident!("{table_name}");
   let column_name_ident = format_ident!("{column_name}");
 
   let test_mod_name = format_ident!("__diesel_enum_test_{}", enum_name_str.to_case(Case::Snake));
@@ -133,7 +133,6 @@ pub fn test_with_id(
       use super::*;
       use diesel::prelude::*;
       use std::collections::HashMap;
-      use crate::schema::#table_name_ident;
       use std::fmt::Write;
       #owo_import
 
@@ -150,8 +149,8 @@ pub fn test_with_id(
               #variants_map
             };
 
-            let db_variants: Vec<(#id_rust_type, String)> = #table_name_ident::table
-            .select((#table_name_ident::id, #table_name_ident::#column_name_ident))
+            let db_variants: Vec<(#id_rust_type, String)> = #table_path::table
+            .select((#table_path::id, #table_path::#column_name_ident))
             .load(conn)
             .unwrap_or_else(|e| panic!("\n ❌ Failed to load the variants for the rust enum `{enum_name}` from the database column `{table_name}.{column_name}`: {e}"));
 
@@ -208,6 +207,7 @@ pub fn test_with_id(
 pub fn test_without_id(
   enum_name: &Ident,
   enum_name_str: &str,
+  table_path: &TokenStream2,
   table_name: &str,
   column_name: &str,
   db_type: &NameTypes,
@@ -231,13 +231,12 @@ pub fn test_without_id(
       db_enum_name.clone(),
     )
   } else {
-    let table_name_ident = format_ident!("{table_name}");
     let column_name_ident = format_ident!("{column_name}");
 
     (
       quote! {
-        crate::schema::#table_name_ident::table
-          .select(crate::schema::#table_name_ident::#column_name_ident)
+        #table_path::table
+          .select(#table_path::#column_name_ident)
       },
       format!("{table_name}.{column_name}"),
     )
