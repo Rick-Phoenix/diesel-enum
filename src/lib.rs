@@ -85,15 +85,15 @@ pub fn diesel_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
     db_type,
   }) = &name_mapping
   {
-    let sql_string_conversions = sql_string_conversions(&enum_name, &sql_type_path, &variants_data);
-
-    enum_impls.extend(sql_string_conversions);
-
     enum_impls.extend(quote! {
       #[derive(diesel_enum_checked::MappedEnum, Debug, diesel::deserialize::FromSqlRow, diesel::expression::AsExpression)]
       #[diesel(sql_type = #sql_type_path)]
       #orig_input
     });
+
+    let sql_string_conversions = sql_string_conversions(&enum_name, &sql_type_path, &variants_data);
+
+    enum_impls.extend(sql_string_conversions);
 
     if let Check::Conn(connection_func) = &conn && id_mapping.is_none() {
       let test_impl = test_without_id(
@@ -153,7 +153,7 @@ pub fn diesel_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
 
     if !has_double_mapping {
       enum_impls.extend(quote! {
-        #[derive(Debug, diesel_enum_checked::MappedEnum diesel::deserialize::FromSqlRow, diesel::expression::AsExpression)]
+        #[derive(Debug, diesel_enum_checked::MappedEnum, diesel::deserialize::FromSqlRow, diesel::expression::AsExpression)]
         #[diesel(sql_type = #sql_type_path)]
         #orig_input
       });
