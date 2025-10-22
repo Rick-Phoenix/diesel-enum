@@ -2,7 +2,11 @@ use convert_case::{Case, Casing};
 use quote::{format_ident, quote};
 use syn::{Ident, Path};
 
-use crate::{attributes::NameTypes, features::async_tests, TokenStream2, VariantData};
+use crate::{
+  attributes::NameTypes,
+  features::{async_tests, pretty_test_errors},
+  TokenStream2, VariantData,
+};
 
 pub fn test_with_id(
   enum_name: &Ident,
@@ -54,6 +58,62 @@ pub fn test_with_id(
     (quote! { #[test] }, None, None)
   };
 
+  let desync_error_message = if pretty_test_errors() {
+    quote! {
+      writeln!(error_message, "\n ❌ The rust enum `{}` and the database column `{}.{}` are out of sync: ", enum_name.bright_yellow(), table_name.bright_cyan(), column_name.bright_cyan()).unwrap();
+    }
+  } else {
+    quote! {
+      writeln!(error_message, "\n ❌ The rust enum `{enum_name}` and the database column `{table_name}.{column_name}` are out of sync: ").unwrap();
+    }
+  };
+
+  let missing_rust_variants_error = if pretty_test_errors() {
+    quote! {
+      writeln!(error_message, "\n  - Variants missing from the {}:", "rust enum".bright_yellow()).unwrap();
+      for variant in &missing_variants {
+        writeln!(error_message, "    • {variant}").unwrap();
+      }
+    }
+  } else {
+    quote! {
+      writeln!(error_message, "\n  - Variants missing from the rust enum: [ {} ]", missing_variants.join(", ")).unwrap();
+    }
+  };
+
+  let missing_db_variants_error = if pretty_test_errors() {
+    quote! {
+      writeln!(error_message, "\n  - Variants missing from the {}:", "database".bright_cyan()).unwrap();
+      for variant in &excess_variants {
+        writeln!(error_message, "    • {variant}").unwrap();
+      }
+    }
+  } else {
+    quote! {
+      writeln!(error_message, "\n  - Variants missing from the database: [ {} ]", excess_variants.join(", ")).unwrap();
+    }
+  };
+
+  let id_mismatch_error = if pretty_test_errors() {
+    quote! {
+      writeln!(error_message, "\n  - Wrong id mapping for `{}`", name.bright_yellow()).unwrap();
+      writeln!(error_message, "    Expected: {}", expected.bright_green()).unwrap();
+      writeln!(error_message, "    Found: {}", found.bright_red()).unwrap();
+    }
+  } else {
+    quote! {
+      writeln!(error_message, "\n  - Wrong id mapping for `{name}`").unwrap();
+      writeln!(error_message, "    Expected: {expected}").unwrap();
+      writeln!(error_message, "    Found: {found}").unwrap();
+    }
+  };
+
+  let owo_import = if pretty_test_errors() {
+    Some(quote! { use owo_colors::OwoColorize; })
+  } else {
+    None
+  };
+
   quote! {
     #[cfg(test)]
     mod #test_mod_name {
@@ -62,6 +122,7 @@ pub fn test_with_id(
       use std::collections::HashMap;
       use crate::schema::#table_name_ident;
       use std::fmt::Write;
+      #owo_import
 
       #test_label
       #async_fn fn #test_func_name() {
@@ -77,7 +138,7 @@ pub fn test_with_id(
           let db_variants: Vec<(#id_rust_type, String)> = #table_name_ident::table
             .select((#table_name_ident::id, #table_name_ident::#column_name_ident))
             .load(conn)
-            .unwrap_or_else(|e| panic!("Failed to load the variants for the rust enum `{enum_name}` from the database column `{table_name}.{column_name}`: {e}"));
+            .unwrap_or_else(|e| panic!("\n ❌ Failed to load the variants for the rust enum `{enum_name}` from the database column `{table_name}.{column_name}`: {e}"));
 
           let mut missing_variants: Vec<String> = Vec::new();
 
@@ -99,23 +160,23 @@ pub fn test_with_id(
           if !missing_variants.is_empty() || !rust_variants.is_empty() || !id_mismatches.is_empty() {
             let mut error_message = String::new();
 
-            write!(error_message, "The rust enum `{enum_name}` and the database column `{table_name}.{column_name}` are out of sync: ").unwrap();
+            #desync_error_message
 
             for ((name, expected, found)) in id_mismatches {
-              write!(error_message, "\n  - Wrong integer conversion for `{name}`. Expected: {expected}, found: {found}").unwrap();
+              #id_mismatch_error
             }
 
             if !missing_variants.is_empty() {
               missing_variants.sort();
 
-              write!(error_message, "\n  - Variants missing from the rust enum: [ {} ]", missing_variants.join(", ")).unwrap();
+              #missing_rust_variants_error
             }
 
             if !rust_variants.is_empty() {
               let mut excess_variants: Vec<&str> = rust_variants.into_iter().map(|(name, _)| name).collect();
               excess_variants.sort();
 
-              write!(error_message, "\n  - Variants missing from the database: [ {} ]", excess_variants.join(", ")).unwrap();
+              #missing_db_variants_error
             }
 
             panic!("{error_message}");
@@ -185,6 +246,48 @@ pub fn test_without_id(
     (quote! { #[test] }, None, None)
   };
 
+  let desync_error_message = if pretty_test_errors() {
+    quote! {
+      writeln!(error_message, "\n ❌ The rust enum `{}` and the database {source_type} `{}` are out of sync: ", enum_name.bright_yellow(), target_name.bright_cyan()).unwrap();
+    }
+  } else {
+    quote! {
+      writeln!(error_message, "\n ❌ The rust enum `{enum_name}` and the database {source_type} `{target_name}` are out of sync: ").unwrap();
+    }
+  };
+
+  let missing_rust_variants_error = if pretty_test_errors() {
+    quote! {
+      writeln!(error_message, "\n  - Variants missing from the {}:", "rust enum".bright_yellow()).unwrap();
+      for variant in &missing_variants {
+        writeln!(error_message, "    • {variant}").unwrap();
+      }
+    }
+  } else {
+    quote! {
+      writeln!(error_message, "\n  - Variants missing from the rust enum: [ {} ]", missing_variants.join(", ")).unwrap();
+    }
+  };
+
+  let missing_db_variants_error = if pretty_test_errors() {
+    quote! {
+      writeln!(error_message, "\n  - Variants missing from the {}:", "database".bright_cyan()).unwrap();
+      for variant in &excess_variants {
+        writeln!(error_message, "    • {variant}").unwrap();
+      }
+    }
+  } else {
+    quote! {
+      writeln!(error_message, "\n  - Variants missing from the database: [ {} ]", excess_variants.join(", ")).unwrap();
+    }
+  };
+
+  let owo_import = if pretty_test_errors() {
+    Some(quote! { use owo_colors::OwoColorize; })
+  } else {
+    None
+  };
+
   quote! {
     #[cfg(test)]
     mod #test_mod_name {
@@ -192,6 +295,7 @@ pub fn test_without_id(
       use diesel::prelude::*;
       use std::collections::HashSet;
       use std::fmt::Write;
+      #owo_import
 
       #test_label
       #async_fn fn #test_func_name() {
@@ -210,7 +314,7 @@ pub fn test_without_id(
 
           let db_variants: Vec<String> = query
           .load(conn)
-          .unwrap_or_else(|e| panic!("Failed to load the variants for the rust enum `{enum_name}` from the database {source_type} `{target_name}`: {e}"));
+          .unwrap_or_else(|e| panic!("\n ❌ Failed to load the variants for the rust enum `{enum_name}` from the database {source_type} `{target_name}`: {e}"));
 
           let mut missing_variants: Vec<String> = Vec::new();
 
@@ -225,19 +329,19 @@ pub fn test_without_id(
           if !missing_variants.is_empty() || !rust_variants.is_empty() {
             let mut error_message = String::new();
 
-            write!(error_message, "The rust enum `{enum_name}` and the database {source_type} `{target_name}` are out of sync: ").unwrap();
+            #desync_error_message
 
             if !missing_variants.is_empty() {
               missing_variants.sort();
 
-              write!(error_message, "\n  - Variants missing from the rust enum: [ {} ]", missing_variants.join(", ")).unwrap();
+              #missing_rust_variants_error
             }
 
             if !rust_variants.is_empty() {
               let mut excess_variants: Vec<&str> = rust_variants.into_iter().collect();
               excess_variants.sort();
 
-              write!(error_message, "\n  - Variants missing from the database: [ {} ]",  excess_variants.join(", ")).unwrap();
+              #missing_db_variants_error
             }
 
             panic!("{error_message}");

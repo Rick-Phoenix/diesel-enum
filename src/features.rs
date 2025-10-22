@@ -13,3 +13,7 @@ pub fn no_default_id_mapping() -> bool {
 pub fn async_tests() -> bool {
   cfg!(feature = "async-tests")
 }
+
+pub fn pretty_test_errors() -> bool {
+  cfg!(feature = "pretty-test-errors")
+}
