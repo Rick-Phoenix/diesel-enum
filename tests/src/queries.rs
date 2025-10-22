@@ -2,13 +2,13 @@ use diesel::prelude::*;
 
 use crate::{
   models::{Types, TypesId},
-  run_query,
+  run_sqlite_query,
   schema::{pokemon_types, pokemons, types},
 };
 
 #[tokio::test]
 async fn select() {
-  let fire_pokemons_by_id: Vec<String> = run_query(|conn| {
+  let fire_pokemons_by_id: Vec<String> = run_sqlite_query(|conn| {
     pokemon_types::table
       .inner_join(types::table)
       .inner_join(pokemons::table)
@@ -22,7 +22,7 @@ async fn select() {
 
   assert_eq!(fire_pokemons_by_id.len(), 5);
 
-  let fire_pokemons_by_name: Vec<String> = run_query(|conn| {
+  let fire_pokemons_by_name: Vec<String> = run_sqlite_query(|conn| {
     pokemon_types::table
       .inner_join(types::table)
       .inner_join(pokemons::table)
@@ -39,7 +39,7 @@ async fn select() {
 
 #[tokio::test]
 async fn modify() {
-  run_query(|conn| {
+  run_sqlite_query(|conn| {
     conn.transaction(|conn| {
       diesel::delete(types::table.filter(types::id.eq(TypesId::Poison))).execute(conn)?;
 

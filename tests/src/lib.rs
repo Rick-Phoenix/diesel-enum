@@ -1,12 +1,14 @@
 use std::{env, error::Error, time::Duration};
 
 use deadpool_diesel::{
-  sqlite::{Hook, HookError, Manager, Pool},
+  postgres::{Manager as PgManager, Pool as PgPool},
+  sqlite::{Hook, HookError, Manager as SqliteManager, Pool as SqlitePool},
   Runtime,
 };
 use deadpool_sync::SyncWrapper;
 use diesel::{prelude::*, SqliteConnection};
 use dotenvy::dotenv;
+use pgtemp::PgTempDB;
 use tokio::sync::OnceCell;
 
 #[cfg(test)]
@@ -16,13 +18,43 @@ pub mod models;
 pub mod queries;
 pub mod schema;
 
-static POOL: OnceCell<deadpool_diesel::sqlite::Pool> = OnceCell::const_new();
+static SQLITE_POOL: OnceCell<deadpool_diesel::sqlite::Pool> = OnceCell::const_new();
+static POSTGRES_POOL: OnceCell<deadpool_diesel::postgres::Pool> = OnceCell::const_new();
 
-pub async fn run_query<T: Send + 'static>(
+pub async fn postgres_testing_callback(
+  callback: impl FnOnce(&mut PgConnection) + std::marker::Send + 'static,
+) {
+  POSTGRES_POOL
+    .get_or_init(|| async {
+      let db = PgTempDB::async_new().await;
+
+      let connection_url = db.connection_uri();
+
+      let manager = PgManager::new(connection_url, Runtime::Tokio1);
+
+      PgPool::builder(manager)
+        .max_size(1)
+        .runtime(Runtime::Tokio1)
+        .wait_timeout(Some(Duration::from_secs(5)))
+        .create_timeout(Some(Duration::from_secs(5)))
+        .recycle_timeout(Some(Duration::from_secs(2)))
+        .build()
+        .expect("could not build the postgres connection pool")
+    })
+    .await
+    .get()
+    .await
+    .expect("Could not get a connection")
+    .interact(callback)
+    .await
+    .expect("Testing outcome was unsuccessful")
+}
+
+pub async fn run_sqlite_query<T: Send + 'static>(
   callback: impl FnOnce(&mut SqliteConnection) -> QueryResult<T> + Send + 'static,
 ) -> Result<T, Box<dyn Error>> {
   Ok(
-    POOL
+    SQLITE_POOL
       .get_or_init(|| async { create_pool(true) })
       .await
       .get()
@@ -36,7 +68,7 @@ pub async fn run_query<T: Send + 'static>(
 pub async fn sqlite_testing_callback(
   callback: impl FnOnce(&mut SqliteConnection) + std::marker::Send + 'static,
 ) {
-  POOL
+  SQLITE_POOL
     .get_or_init(|| async { create_pool(true) })
     .await
     .get()
@@ -52,9 +84,9 @@ pub fn create_pool(is_test: bool) -> deadpool_diesel::sqlite::Pool {
 
   let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
-  let manager = Manager::new(database_url, Runtime::Tokio1);
+  let manager = SqliteManager::new(database_url, Runtime::Tokio1);
 
-  let mut builder = Pool::builder(manager);
+  let mut builder = SqlitePool::builder(manager);
 
   builder = if is_test {
     builder.max_size(1)

@@ -13,7 +13,7 @@ diesel-enum-checked = { path = "..", features = [
   "pretty-test-errors",
   "default-skip-test",
 ] }
-deadpool-diesel = { version = "0.6", features = ["sqlite", "rt_tokio_1"] }
+deadpool-diesel = { version = "0.6", features = ["sqlite", "postgres"] }
 deadpool-sync = "0.1.4"
 dotenvy = "0.15"
 diesel = { version = "2.3", features = [
