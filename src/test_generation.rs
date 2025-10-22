@@ -2,7 +2,7 @@ use convert_case::{Case, Casing};
 use quote::{format_ident, quote};
 use syn::{Ident, Path};
 
-use crate::{attributes::NameTypes, TokenStream2, VariantData};
+use crate::{attributes::NameTypes, features::async_tests, TokenStream2, VariantData};
 
 pub fn test_with_id(
   enum_name: &Ident,
@@ -10,7 +10,7 @@ pub fn test_with_id(
   table_name: &str,
   column_name: &str,
   id_rust_type: &Ident,
-  connection_func: &Path,
+  conn_callback: &Path,
   variants_data: &[VariantData],
 ) -> TokenStream2 {
   let table_name_ident = format_ident!("{table_name}");
@@ -44,6 +44,16 @@ pub fn test_with_id(
     }
   };
 
+  let (test_label, async_fn, await_call) = if async_tests() {
+    (
+      quote! { #[tokio::test] },
+      Some(quote! { async }),
+      Some(quote! { .await }),
+    )
+  } else {
+    (quote! { #[test] }, None, None)
+  };
+
   quote! {
     #[cfg(test)]
     mod #test_mod_name {
@@ -53,64 +63,64 @@ pub fn test_with_id(
       use crate::schema::#table_name_ident;
       use std::fmt::Write;
 
-      #[test]
-      fn #test_func_name() {
-        let enum_name = #enum_name_str;
-        let table_name = #table_name;
-        let column_name = #column_name;
+      #test_label
+      #async_fn fn #test_func_name() {
+        #conn_callback(|conn| {
+          let enum_name = #enum_name_str;
+          let table_name = #table_name;
+          let column_name = #column_name;
 
-        let mut rust_variants: HashMap<&'static str, #id_rust_type> = {
-          #variants_map
-        };
-
-        let conn = &mut #connection_func();
-
-        let db_variants: Vec<(#id_rust_type, String)> = #table_name_ident::table
-          .select((#table_name_ident::id, #table_name_ident::#column_name_ident))
-          .load(conn)
-          .unwrap_or_else(|e| panic!("Failed to load the variants for the rust enum `{enum_name}` from the database column `{table_name}.{column_name}`: {e}"));
-
-        let mut missing_variants: Vec<String> = Vec::new();
-
-        let mut id_mismatches: Vec<(String, #id_rust_type, #id_rust_type)> = Vec::new();
-
-        for (id, name) in db_variants {
-          let variant_id = if let Some(variant) = rust_variants.remove(name.as_str()) {
-            variant
-          } else {
-            missing_variants.push(name);
-            continue;
+          let mut rust_variants: HashMap<&'static str, #id_rust_type> = {
+            #variants_map
           };
 
-          if id != variant_id {
-            id_mismatches.push((name, id, variant_id));
-          }
-        }
+          let db_variants: Vec<(#id_rust_type, String)> = #table_name_ident::table
+            .select((#table_name_ident::id, #table_name_ident::#column_name_ident))
+            .load(conn)
+            .unwrap_or_else(|e| panic!("Failed to load the variants for the rust enum `{enum_name}` from the database column `{table_name}.{column_name}`: {e}"));
 
-        if !missing_variants.is_empty() || !rust_variants.is_empty() || !id_mismatches.is_empty() {
-          let mut error_message = String::new();
+          let mut missing_variants: Vec<String> = Vec::new();
 
-          write!(error_message, "The rust enum `{enum_name}` and the database column `{table_name}.{column_name}` are out of sync: ").unwrap();
+          let mut id_mismatches: Vec<(String, #id_rust_type, #id_rust_type)> = Vec::new();
 
-          for ((name, expected, found)) in id_mismatches {
-            write!(error_message, "\n  - Wrong integer conversion for `{name}`. Expected: {expected}, found: {found}").unwrap();
-          }
+          for (id, name) in db_variants {
+            let variant_id = if let Some(variant) = rust_variants.remove(name.as_str()) {
+              variant
+            } else {
+              missing_variants.push(name);
+              continue;
+            };
 
-          if !missing_variants.is_empty() {
-            missing_variants.sort();
-
-            write!(error_message, "\n  - Variants missing from the rust enum: [ {} ]", missing_variants.join(", ")).unwrap();
-          }
-
-          if !rust_variants.is_empty() {
-            let mut excess_variants: Vec<&str> = rust_variants.into_iter().map(|(name, _)| name).collect();
-            excess_variants.sort();
-
-            write!(error_message, "\n  - Variants missing from DB: [ {} ]", excess_variants.join(", ")).unwrap();
+            if id != variant_id {
+              id_mismatches.push((name, id, variant_id));
+            }
           }
 
-          panic!("{error_message}");
-        }
+          if !missing_variants.is_empty() || !rust_variants.is_empty() || !id_mismatches.is_empty() {
+            let mut error_message = String::new();
+
+            write!(error_message, "The rust enum `{enum_name}` and the database column `{table_name}.{column_name}` are out of sync: ").unwrap();
+
+            for ((name, expected, found)) in id_mismatches {
+              write!(error_message, "\n  - Wrong integer conversion for `{name}`. Expected: {expected}, found: {found}").unwrap();
+            }
+
+            if !missing_variants.is_empty() {
+              missing_variants.sort();
+
+              write!(error_message, "\n  - Variants missing from the rust enum: [ {} ]", missing_variants.join(", ")).unwrap();
+            }
+
+            if !rust_variants.is_empty() {
+              let mut excess_variants: Vec<&str> = rust_variants.into_iter().map(|(name, _)| name).collect();
+              excess_variants.sort();
+
+              write!(error_message, "\n  - Variants missing from the database: [ {} ]", excess_variants.join(", ")).unwrap();
+            }
+
+            panic!("{error_message}");
+          }
+        })#await_call;
       }
     }
   }
@@ -121,7 +131,7 @@ pub fn test_without_id(
   table_name: &str,
   column_name: &str,
   db_type: &NameTypes,
-  connection_func: &Path,
+  conn_callback: &Path,
   variants_data: &[VariantData],
 ) -> TokenStream2 {
   let is_custom = db_type.is_custom();
@@ -165,6 +175,16 @@ pub fn test_without_id(
 
   let source_type = if is_custom { "enum" } else { "column" };
 
+  let (test_label, async_fn, await_call) = if async_tests() {
+    (
+      quote! { #[tokio::test] },
+      Some(quote! { async }),
+      Some(quote! { .await }),
+    )
+  } else {
+    (quote! { #[test] }, None, None)
+  };
+
   quote! {
     #[cfg(test)]
     mod #test_mod_name {
@@ -173,56 +193,56 @@ pub fn test_without_id(
       use std::collections::HashSet;
       use std::fmt::Write;
 
-      #[test]
-      fn #test_func_name() {
-        let source_type = #source_type;
-        let enum_name = #enum_name;
-        let target_name = #target_name;
+      #test_label
+      #async_fn fn #test_func_name() {
+        #conn_callback(|conn| {
+          let source_type = #source_type;
+          let enum_name = #enum_name;
+          let target_name = #target_name;
 
-        let mut rust_variants = HashSet::from({
-          [ #(#variant_db_names),* ]
-        });
+          let mut rust_variants = HashSet::from({
+            [ #(#variant_db_names),* ]
+          });
 
-        let conn = &mut #connection_func();
+          let query = {
+            #names_query
+          };
 
-        let query = {
-          #names_query
-        };
-
-        let db_variants: Vec<String> = query
+          let db_variants: Vec<String> = query
           .load(conn)
           .unwrap_or_else(|e| panic!("Failed to load the variants for the rust enum `{enum_name}` from the database {source_type} `{target_name}`: {e}"));
 
-        let mut missing_variants: Vec<String> = Vec::new();
+          let mut missing_variants: Vec<String> = Vec::new();
 
-        for variant in db_variants {
-          let was_present = rust_variants.remove(variant.as_str());
+          for variant in db_variants {
+            let was_present = rust_variants.remove(variant.as_str());
 
-          if !was_present {
-            missing_variants.push(variant);
-          }
-        }
-
-        if !missing_variants.is_empty() || !rust_variants.is_empty() {
-          let mut error_message = String::new();
-
-          write!(error_message, "The rust enum `{enum_name}` and the database {source_type} `{target_name}` are out of sync: ").unwrap();
-
-          if !missing_variants.is_empty() {
-            missing_variants.sort();
-
-            write!(error_message, "\n  - Variants missing from the rust enum: [ {} ]", missing_variants.join(", ")).unwrap();
+            if !was_present {
+              missing_variants.push(variant);
+            }
           }
 
-          if !rust_variants.is_empty() {
-            let mut excess_variants: Vec<&str> = rust_variants.into_iter().collect();
-            excess_variants.sort();
+          if !missing_variants.is_empty() || !rust_variants.is_empty() {
+            let mut error_message = String::new();
 
-            write!(error_message, "\n  - Variants missing from the database: [ {} ]",  excess_variants.join(", ")).unwrap();
+            write!(error_message, "The rust enum `{enum_name}` and the database {source_type} `{target_name}` are out of sync: ").unwrap();
+
+            if !missing_variants.is_empty() {
+              missing_variants.sort();
+
+              write!(error_message, "\n  - Variants missing from the rust enum: [ {} ]", missing_variants.join(", ")).unwrap();
+            }
+
+            if !rust_variants.is_empty() {
+              let mut excess_variants: Vec<&str> = rust_variants.into_iter().collect();
+              excess_variants.sort();
+
+              write!(error_message, "\n  - Variants missing from the database: [ {} ]",  excess_variants.join(", ")).unwrap();
+            }
+
+            panic!("{error_message}");
           }
-
-          panic!("{error_message}");
-        }
+        })#await_call;
       }
     }
   }
