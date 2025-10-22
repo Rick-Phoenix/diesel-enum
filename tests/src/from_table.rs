@@ -167,6 +167,38 @@ mod ignored_id_mismatch {
   }
 }
 
+mod skipped_ids {
+  use super::*;
+
+  #[diesel_enum(conn = crate::sqlite_testing_callback, skip_ids(1..6, 6..=10), case = "PascalCase", name_mapping(default), id_mapping(default))]
+  enum Types {
+    Grass,
+    Poison,
+    Fire,
+    Flying,
+    Water,
+    Bug,
+    Normal,
+    Electric,
+    Ground,
+    Fairy,
+    Fighting,
+    Psychic,
+    Rock,
+    Steel,
+    Ice,
+    Ghost,
+    Dragon,
+    Dark,
+  }
+
+  #[tokio::test]
+  #[should_panic]
+  async fn skipped_ids() {
+    Types::check_consistency().await;
+  }
+}
+
 mod custom_table_name {
   use super::*;
 
