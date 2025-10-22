@@ -16,12 +16,12 @@ pub fn test_with_id(
   id_rust_type: &Ident,
   conn_callback: &Path,
   variants_data: &[VariantData],
+  skip_test: bool,
 ) -> TokenStream2 {
   let table_name_ident = format_ident!("{table_name}");
   let column_name_ident = format_ident!("{column_name}");
 
   let test_mod_name = format_ident!("__diesel_enum_test_{}", enum_name_str.to_case(Case::Snake));
-  let test_func_name = format_ident!("diesel_enum_test_{}", enum_name_str.to_case(Case::Snake));
 
   let variants_map = {
     let mut collection_tokens = TokenStream2::new();
@@ -48,14 +48,10 @@ pub fn test_with_id(
     }
   };
 
-  let (test_label, async_fn, await_call) = if async_tests() {
-    (
-      quote! { #[tokio::test] },
-      Some(quote! { async }),
-      Some(quote! { .await }),
-    )
+  let (async_fn, await_call) = if async_tests() {
+    (Some(quote! { async }), Some(quote! { .await }))
   } else {
-    (quote! { #[test] }, None, None)
+    (None, None)
   };
 
   let desync_error_message = if pretty_test_errors() {
@@ -114,6 +110,25 @@ pub fn test_with_id(
     None
   };
 
+  let auto_test = if !skip_test {
+    let test_label = if async_tests() {
+      quote! { #[tokio::test] }
+    } else {
+      quote! { #[test] }
+    };
+
+    let test_func_name = format_ident!("diesel_enum_test_{}", enum_name_str.to_case(Case::Snake));
+
+    Some(quote! {
+      #test_label
+      #async_fn fn #test_func_name() {
+        #enum_name::check_consistency()#await_call;
+      }
+    })
+  } else {
+    None
+  };
+
   quote! {
     #[cfg(test)]
     mod #test_mod_name {
@@ -124,76 +139,83 @@ pub fn test_with_id(
       use std::fmt::Write;
       #owo_import
 
-      #test_label
-      #async_fn fn #test_func_name() {
-        #conn_callback(|conn| {
-          let enum_name = #enum_name_str;
-          let table_name = #table_name;
-          let column_name = #column_name;
+      impl #enum_name {
+        #[track_caller]
+        pub #async_fn fn check_consistency()
+        {
+          #conn_callback(|conn| {
+            let enum_name = #enum_name_str;
+            let table_name = #table_name;
+            let column_name = #column_name;
 
-          let mut rust_variants: HashMap<&'static str, #id_rust_type> = {
-            #variants_map
-          };
+            let mut rust_variants: HashMap<&'static str, #id_rust_type> = {
+              #variants_map
+            };
 
-          let db_variants: Vec<(#id_rust_type, String)> = #table_name_ident::table
+            let db_variants: Vec<(#id_rust_type, String)> = #table_name_ident::table
             .select((#table_name_ident::id, #table_name_ident::#column_name_ident))
             .load(conn)
             .unwrap_or_else(|e| panic!("\n ❌ Failed to load the variants for the rust enum `{enum_name}` from the database column `{table_name}.{column_name}`: {e}"));
 
-          let mut missing_variants: Vec<String> = Vec::new();
+            let mut missing_variants: Vec<String> = Vec::new();
 
-          let mut id_mismatches: Vec<(String, #id_rust_type, #id_rust_type)> = Vec::new();
+            let mut id_mismatches: Vec<(String, #id_rust_type, #id_rust_type)> = Vec::new();
 
-          for (id, name) in db_variants {
-            let variant_id = if let Some(variant) = rust_variants.remove(name.as_str()) {
-              variant
-            } else {
-              missing_variants.push(name);
-              continue;
-            };
+            for (id, name) in db_variants {
+              let variant_id = if let Some(variant) = rust_variants.remove(name.as_str()) {
+                variant
+              } else {
+                missing_variants.push(name);
+                continue;
+              };
 
-            if id != variant_id {
-              id_mismatches.push((name, id, variant_id));
-            }
-          }
-
-          if !missing_variants.is_empty() || !rust_variants.is_empty() || !id_mismatches.is_empty() {
-            let mut error_message = String::new();
-
-            #desync_error_message
-
-            for ((name, expected, found)) in id_mismatches {
-              #id_mismatch_error
+              if id != variant_id {
+                id_mismatches.push((name, id, variant_id));
+              }
             }
 
-            if !missing_variants.is_empty() {
-              missing_variants.sort();
+            if !missing_variants.is_empty() || !rust_variants.is_empty() || !id_mismatches.is_empty() {
+              let mut error_message = String::new();
 
-              #missing_rust_variants_error
+              #desync_error_message
+
+              for ((name, expected, found)) in id_mismatches {
+                #id_mismatch_error
+              }
+
+              if !missing_variants.is_empty() {
+                missing_variants.sort();
+
+                #missing_rust_variants_error
+              }
+
+              if !rust_variants.is_empty() {
+                let mut excess_variants: Vec<&str> = rust_variants.into_iter().map(|(name, _)| name).collect();
+                excess_variants.sort();
+
+                #missing_db_variants_error
+              }
+
+              panic!("{error_message}");
             }
-
-            if !rust_variants.is_empty() {
-              let mut excess_variants: Vec<&str> = rust_variants.into_iter().map(|(name, _)| name).collect();
-              excess_variants.sort();
-
-              #missing_db_variants_error
-            }
-
-            panic!("{error_message}");
-          }
-        })#await_call;
+          })#await_call;
+        }
       }
+
+      #auto_test
     }
   }
 }
 
 pub fn test_without_id(
-  enum_name: &str,
+  enum_name: &Ident,
+  enum_name_str: &str,
   table_name: &str,
   column_name: &str,
   db_type: &NameTypes,
   conn_callback: &Path,
   variants_data: &[VariantData],
+  skip_test: bool,
 ) -> TokenStream2 {
   let is_custom = db_type.is_custom();
 
@@ -223,8 +245,7 @@ pub fn test_without_id(
     )
   };
 
-  let test_mod_name = format_ident!("__diesel_enum_test_{}", enum_name.to_case(Case::Snake));
-  let test_func_name = format_ident!("diesel_enum_test_{}", enum_name.to_case(Case::Snake));
+  let test_mod_name = format_ident!("__diesel_enum_test_{}", enum_name_str.to_case(Case::Snake));
 
   let variant_db_names = variants_data.iter().filter_map(|data| {
     if !data.skip_check {
@@ -236,14 +257,10 @@ pub fn test_without_id(
 
   let source_type = if is_custom { "enum" } else { "column" };
 
-  let (test_label, async_fn, await_call) = if async_tests() {
-    (
-      quote! { #[tokio::test] },
-      Some(quote! { async }),
-      Some(quote! { .await }),
-    )
+  let (async_fn, await_call) = if async_tests() {
+    (Some(quote! { async }), Some(quote! { .await }))
   } else {
-    (quote! { #[test] }, None, None)
+    (None, None)
   };
 
   let desync_error_message = if pretty_test_errors() {
@@ -288,6 +305,25 @@ pub fn test_without_id(
     None
   };
 
+  let auto_test = if !skip_test {
+    let test_label = if async_tests() {
+      quote! { #[tokio::test] }
+    } else {
+      quote! { #[test] }
+    };
+
+    let test_func_name = format_ident!("diesel_enum_test_{}", enum_name_str.to_case(Case::Snake));
+
+    Some(quote! {
+      #test_label
+      #async_fn fn #test_func_name() {
+        #enum_name::check_consistency()#await_call;
+      }
+    })
+  } else {
+    None
+  };
+
   quote! {
     #[cfg(test)]
     mod #test_mod_name {
@@ -297,57 +333,63 @@ pub fn test_without_id(
       use std::fmt::Write;
       #owo_import
 
-      #test_label
-      #async_fn fn #test_func_name() {
-        #conn_callback(|conn| {
-          let source_type = #source_type;
-          let enum_name = #enum_name;
-          let target_name = #target_name;
 
-          let mut rust_variants = HashSet::from({
-            [ #(#variant_db_names),* ]
-          });
+      impl #enum_name {
+        #[track_caller]
+        pub #async_fn fn check_consistency()
+        {
+          #conn_callback(|conn| {
+            let source_type = #source_type;
+            let enum_name = #enum_name_str;
+            let target_name = #target_name;
 
-          let query = {
-            #names_query
-          };
+            let mut rust_variants = HashSet::from({
+              [ #(#variant_db_names),* ]
+            });
 
-          let db_variants: Vec<String> = query
-          .load(conn)
-          .unwrap_or_else(|e| panic!("\n ❌ Failed to load the variants for the rust enum `{enum_name}` from the database {source_type} `{target_name}`: {e}"));
+            let query = {
+              #names_query
+            };
 
-          let mut missing_variants: Vec<String> = Vec::new();
+            let db_variants: Vec<String> = query
+            .load(conn)
+            .unwrap_or_else(|e| panic!("\n ❌ Failed to load the variants for the rust enum `{enum_name}` from the database {source_type} `{target_name}`: {e}"));
 
-          for variant in db_variants {
-            let was_present = rust_variants.remove(variant.as_str());
+            let mut missing_variants: Vec<String> = Vec::new();
 
-            if !was_present {
-              missing_variants.push(variant);
-            }
-          }
+            for variant in db_variants {
+              let was_present = rust_variants.remove(variant.as_str());
 
-          if !missing_variants.is_empty() || !rust_variants.is_empty() {
-            let mut error_message = String::new();
-
-            #desync_error_message
-
-            if !missing_variants.is_empty() {
-              missing_variants.sort();
-
-              #missing_rust_variants_error
+              if !was_present {
+                missing_variants.push(variant);
+              }
             }
 
-            if !rust_variants.is_empty() {
-              let mut excess_variants: Vec<&str> = rust_variants.into_iter().collect();
-              excess_variants.sort();
+            if !missing_variants.is_empty() || !rust_variants.is_empty() {
+              let mut error_message = String::new();
 
-              #missing_db_variants_error
+              #desync_error_message
+
+              if !missing_variants.is_empty() {
+                missing_variants.sort();
+
+                #missing_rust_variants_error
+              }
+
+              if !rust_variants.is_empty() {
+                let mut excess_variants: Vec<&str> = rust_variants.into_iter().collect();
+                excess_variants.sort();
+
+                #missing_db_variants_error
+              }
+
+              panic!("{error_message}");
             }
-
-            panic!("{error_message}");
-          }
-        })#await_call;
+          })#await_call;
+        }
       }
+
+      #auto_test
     }
   }
 }
