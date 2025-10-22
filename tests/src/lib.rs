@@ -9,17 +9,14 @@ use diesel::{prelude::*, SqliteConnection};
 use dotenvy::dotenv;
 use tokio::sync::OnceCell;
 
-use crate::{
-  models::*,
-  schema::{pokemon_types, pokemons, types},
-};
-
+#[cfg(test)]
+pub mod from_table;
 pub mod models;
 pub mod schema;
 
 static POOL: OnceCell<deadpool_diesel::sqlite::Pool> = OnceCell::const_new();
 
-pub async fn testing_callback(
+pub async fn sqlite_testing_callback(
   callback: impl FnOnce(&mut SqliteConnection) + std::marker::Send + 'static,
 ) {
   POOL
@@ -89,85 +86,3 @@ async fn connection_setup(conn: &mut SyncWrapper<SqliteConnection>) -> Result<()
 
   Ok(())
 }
-
-#[allow(dead_code)]
-#[derive(Debug)]
-struct PokeData {
-  pub pokemon: Pokemon,
-  pub images: ImageData,
-  pub stats: BaseStat,
-  pub types: Vec<String>,
-}
-
-#[allow(dead_code)]
-fn select_pokemon(conn: &mut SqliteConnection) -> Result<(), Box<dyn std::error::Error>> {
-  let poke_data: Pokemon = pokemons::table
-    .filter(pokemons::id.eq(1))
-    .select(Pokemon::as_select())
-    .get_result(conn)?;
-
-  let base_stats = BaseStat::belonging_to(&poke_data)
-    .select(BaseStat::as_select())
-    .get_result(conn)?;
-  let img_data = ImageData::belonging_to(&poke_data)
-    .select(ImageData::as_select())
-    .get_result(conn)?;
-
-  let poke_types = PokemonType::belonging_to(&poke_data)
-    .inner_join(types::table)
-    .select(types::name)
-    .load::<String>(conn)?;
-
-  let complete_data = PokeData {
-    pokemon: poke_data,
-    stats: base_stats,
-    types: poke_types,
-    images: img_data,
-  };
-  println!("Complete data: {:#?}", complete_data);
-  Ok(())
-}
-
-#[allow(dead_code)]
-#[diesel::dsl::auto_type]
-fn pokemons_with_types() -> _ {
-  pokemon_types::table
-    .inner_join(types::table)
-    .inner_join(pokemons::table)
-}
-
-#[allow(dead_code)]
-fn pokemons_by_type(
-  conn: &mut SqliteConnection,
-  poke_type: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
-  let pokemons_with_types = pokemons_with_types();
-
-  let pokemons = pokemons_with_types
-    .filter(types::name.eq(poke_type))
-    .select(pokemons::name)
-    .limit(5)
-    .load::<String>(conn)?;
-
-  println!("{poke_type} pokemons: {:#?}", pokemons);
-
-  Ok(())
-}
-
-// #[cfg(test)]
-// mod test {
-//   use crate::{create_pool, pokemons_by_type};
-//
-//   #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-//   async fn test_query() {
-//     create_pool(true)
-//       .get()
-//       .await
-//       .expect("Could not get a pool")
-//       .interact(|conn| {
-//         pokemons_by_type(conn, "Grass").expect("Failed query");
-//       })
-//       .await
-//       .expect("Query unsuccessful")
-//   }
-// }

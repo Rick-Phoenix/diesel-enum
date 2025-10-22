@@ -51,11 +51,9 @@ pub struct PokemonType {
 }
 
 #[derive(Clone)]
-#[diesel_enum(conn = crate::testing_callback, name_mapping(default), case = "PascalCase", id_mapping(default))]
+#[diesel_enum(conn = crate::sqlite_testing_callback, name_mapping(default), case = "PascalCase", id_mapping(default))]
 pub enum Types {
-  #[db_mapping(id = 14)]
   Grass,
-  #[db_mapping(id = 15, name = "abc")]
   Poison,
   Fire,
   Flying,

@@ -7,9 +7,11 @@ edition = "2024"
 owo-colors = "4"
 
 [dependencies]
+pgtemp = "0.6.0"
 diesel-enum-checked = { path = "..", features = [
   "async-tests",
   "pretty-test-errors",
+  "default-skip-test",
 ] }
 deadpool-diesel = { version = "0.6", features = ["sqlite", "rt_tokio_1"] }
 deadpool-sync = "0.1.4"
