@@ -7,6 +7,7 @@ edition = "2024"
 owo-colors = "4"
 
 [dependencies]
+diesel_migrations = "2.3.0"
 pgtemp = "0.6.0"
 diesel-enum-checked = { path = "..", features = [
   "async-tests",

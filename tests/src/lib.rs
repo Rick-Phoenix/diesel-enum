@@ -7,13 +7,19 @@ use deadpool_diesel::{
 };
 use deadpool_sync::SyncWrapper;
 use diesel::{prelude::*, SqliteConnection};
+use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use dotenvy::dotenv;
 use pgtemp::PgTempDB;
 use tokio::sync::OnceCell;
 
+const PG_MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/pg");
+
 #[cfg(test)]
 pub mod from_table;
 pub mod models;
+pub mod pg_schema;
+#[cfg(test)]
+pub mod pg_tests;
 #[cfg(test)]
 pub mod queries;
 pub mod schema;
@@ -25,22 +31,7 @@ pub async fn postgres_testing_callback(
   callback: impl FnOnce(&mut PgConnection) + std::marker::Send + 'static,
 ) {
   POSTGRES_POOL
-    .get_or_init(|| async {
-      let db = PgTempDB::async_new().await;
-
-      let connection_url = db.connection_uri();
-
-      let manager = PgManager::new(connection_url, Runtime::Tokio1);
-
-      PgPool::builder(manager)
-        .max_size(1)
-        .runtime(Runtime::Tokio1)
-        .wait_timeout(Some(Duration::from_secs(5)))
-        .create_timeout(Some(Duration::from_secs(5)))
-        .recycle_timeout(Some(Duration::from_secs(2)))
-        .build()
-        .expect("could not build the postgres connection pool")
-    })
+    .get_or_init(|| async { create_pg_pool().await })
     .await
     .get()
     .await
@@ -50,12 +41,27 @@ pub async fn postgres_testing_callback(
     .expect("Testing outcome was unsuccessful")
 }
 
+pub async fn run_pg_query<T: Send + 'static>(
+  callback: impl FnOnce(&mut PgConnection) -> QueryResult<T> + Send + 'static,
+) -> Result<T, Box<dyn Error>> {
+  Ok(
+    POSTGRES_POOL
+      .get_or_init(|| async { create_pg_pool().await })
+      .await
+      .get()
+      .await
+      .expect("Could not get a connection")
+      .interact(callback)
+      .await??,
+  )
+}
+
 pub async fn run_sqlite_query<T: Send + 'static>(
   callback: impl FnOnce(&mut SqliteConnection) -> QueryResult<T> + Send + 'static,
 ) -> Result<T, Box<dyn Error>> {
   Ok(
     SQLITE_POOL
-      .get_or_init(|| async { create_pool(true) })
+      .get_or_init(|| async { create_sqlite_pool() })
       .await
       .get()
       .await
@@ -69,7 +75,7 @@ pub async fn sqlite_testing_callback(
   callback: impl FnOnce(&mut SqliteConnection) + std::marker::Send + 'static,
 ) {
   SQLITE_POOL
-    .get_or_init(|| async { create_pool(true) })
+    .get_or_init(|| async { create_sqlite_pool() })
     .await
     .get()
     .await
@@ -79,22 +85,48 @@ pub async fn sqlite_testing_callback(
     .expect("Testing outcome was unsuccessful")
 }
 
-pub fn create_pool(is_test: bool) -> deadpool_diesel::sqlite::Pool {
+// Needs to be put here to avoid being dropped earlier
+static PG_TEMP: OnceCell<PgTempDB> = OnceCell::const_new();
+
+pub async fn create_pg_pool() -> deadpool_diesel::postgres::Pool {
+  let db = PG_TEMP
+    .get_or_init(async || PgTempDB::async_new().await)
+    .await;
+
+  let url = db.connection_uri();
+
+  let manager = PgManager::new(url, Runtime::Tokio1);
+
+  let pool = PgPool::builder(manager)
+    .max_size(1)
+    .runtime(Runtime::Tokio1)
+    .build()
+    .expect("could not build the postgres connection pool");
+
+  pool
+    .get()
+    .await
+    .unwrap()
+    .interact(|conn| {
+      conn
+        .run_pending_migrations(PG_MIGRATIONS)
+        .expect("Failed to run migrations");
+    })
+    .await
+    .unwrap();
+
+  pool
+}
+
+pub fn create_sqlite_pool() -> deadpool_diesel::sqlite::Pool {
   dotenv().ok();
 
   let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
   let manager = SqliteManager::new(database_url, Runtime::Tokio1);
 
-  let mut builder = SqlitePool::builder(manager);
-
-  builder = if is_test {
-    builder.max_size(1)
-  } else {
-    builder.max_size(8)
-  };
-
-  builder
+  SqlitePool::builder(manager)
+    .max_size(1)
     .runtime(Runtime::Tokio1)
     .wait_timeout(Some(Duration::from_secs(5)))
     .create_timeout(Some(Duration::from_secs(5)))
@@ -109,26 +141,8 @@ pub fn create_pool(is_test: bool) -> deadpool_diesel::sqlite::Pool {
 async fn connection_setup(conn: &mut SyncWrapper<SqliteConnection>) -> Result<(), HookError> {
   let _ = conn
     .interact(move |conn| {
-      // this corresponds to 2 seconds
-      // if we ever see errors regarding busy_timeout in production
-      // we might want to consider to increase this time
       diesel::sql_query("PRAGMA busy_timeout = 2000;").execute(conn)?;
-      // better write-concurrency
       diesel::sql_query("PRAGMA journal_mode = WAL;").execute(conn)?;
-      // fsync only in critical moments
-      diesel::sql_query("PRAGMA synchronous = NORMAL;").execute(conn)?;
-      // write WAL changes back every 1000 pages, for an in average 1MB WAL file. May affect readers if number is increased
-      diesel::sql_query("PRAGMA wal_autocheckpoint = 1000;").execute(conn)?;
-      // free some space by truncating possibly massive WAL files from the last run
-      diesel::sql_query("PRAGMA wal_checkpoint(TRUNCATE);").execute(conn)?;
-      // maximum size of the WAL file, corresponds to 64MB
-      diesel::sql_query("PRAGMA journal_size_limit = 67108864;").execute(conn)?;
-      // maximum size of the internal mmap pool. Corresponds to 128MB, matches postgres default settings
-      diesel::sql_query("PRAGMA mmap_size = 134217728;").execute(conn)?;
-      // maximum number of database disk pages that will be hold in memory. Corresponds to ~8MB
-      diesel::sql_query("PRAGMA cache_size = 2000;").execute(conn)?;
-      //enforce foreign keys
-      // diesel::sql_query("PRAGMA foreign_keys = ON;").execute(conn)?;
       QueryResult::Ok(())
     })
     .await;
