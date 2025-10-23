@@ -14,10 +14,6 @@ pub fn no_default_id_mapping() -> bool {
   cfg!(feature = "no-default-id-mapping")
 }
 
-pub fn async_tests() -> bool {
-  cfg!(feature = "async-tests")
-}
-
 pub fn default_runner_path() -> bool {
   cfg!(feature = "default-runner-path")
 }

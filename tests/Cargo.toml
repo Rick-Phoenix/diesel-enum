@@ -10,7 +10,6 @@ test-runners = { path = "../test-runners/", features = ["sqlite"] }
 diesel_migrations = "2.3.0"
 pgtemp = "0.6.0"
 diesel-enums = { path = "../prelude", features = [
-  "async-tests",
   "default-skip-test",
   "default-sqlite-runner",
 ] }

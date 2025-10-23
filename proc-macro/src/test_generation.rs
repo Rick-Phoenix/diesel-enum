@@ -4,7 +4,7 @@ use convert_case::{Case, Casing};
 use quote::{format_ident, quote};
 use syn::Ident;
 
-use crate::{attributes::NameTypes, features::async_tests, TokenStream2, VariantData};
+use crate::{attributes::NameTypes, TokenStream2, VariantData};
 
 pub fn test_with_id(
   enum_name: &Ident,
@@ -44,25 +44,13 @@ pub fn test_with_id(
     }
   };
 
-  let (async_fn, await_call) = if async_tests() {
-    (Some(quote! { async }), Some(quote! { .await }))
-  } else {
-    (None, None)
-  };
-
   let auto_test = if !skip_test {
-    let test_label = if async_tests() {
-      quote! { #[tokio::test] }
-    } else {
-      quote! { #[test] }
-    };
-
     let test_func_name = format_ident!("diesel_enum_test_{}", enum_name_str.to_case(Case::Snake));
 
     Some(quote! {
-      #test_label
-      #async_fn fn #test_func_name() {
-        #enum_name::check_consistency()#await_call.unwrap();
+      #[tokio::test]
+      async fn #test_func_name() {
+        #enum_name::check_consistency().await.unwrap();
       }
     })
   } else {
@@ -78,7 +66,7 @@ pub fn test_with_id(
 
       impl #enum_name {
         #[track_caller]
-        pub #async_fn fn check_consistency() -> Result<(), diesel_enums::DbEnumError>
+        pub async fn check_consistency() -> Result<(), diesel_enums::DbEnumError>
         {
           #conn_callback(|conn| {
             let enum_name = #enum_name_str;
@@ -135,7 +123,7 @@ pub fn test_with_id(
             } else {
               Ok(())
             }
-          })#await_call
+          }).await
         }
       }
 
@@ -190,25 +178,13 @@ pub fn test_without_id(
 
   let variant_db_names = variants_data.iter().map(|data| &data.db_name);
 
-  let (async_fn, await_call) = if async_tests() {
-    (Some(quote! { async }), Some(quote! { .await }))
-  } else {
-    (None, None)
-  };
-
   let auto_test = if !skip_test {
-    let test_label = if async_tests() {
-      quote! { #[tokio::test] }
-    } else {
-      quote! { #[test] }
-    };
-
     let test_func_name = format_ident!("diesel_enum_test_{}", enum_name_str.to_case(Case::Snake));
 
     Some(quote! {
-      #test_label
-      #async_fn fn #test_func_name() {
-        #enum_name::check_consistency()#await_call.unwrap();
+      #[tokio::test]
+      async fn #test_func_name() {
+        #enum_name::check_consistency().await.unwrap();
       }
     })
   } else {
@@ -224,7 +200,7 @@ pub fn test_without_id(
 
       impl #enum_name {
         #[track_caller]
-        pub #async_fn fn check_consistency() -> Result<(), diesel_enums::DbEnumError>
+        pub async fn check_consistency() -> Result<(), diesel_enums::DbEnumError>
         {
           #conn_callback(|conn| {
             let enum_name = #enum_name_str;
@@ -267,7 +243,7 @@ pub fn test_without_id(
             } else {
               Ok(())
             }
-          })#await_call
+          }).await
         }
       }
 
@@ -277,20 +253,14 @@ pub fn test_without_id(
 }
 
 pub fn check_consistency_inter_call(enum_name: &Ident) -> TokenStream2 {
-  let (async_fn, await_call) = if async_tests() {
-    (Some(quote! { async }), Some(quote! { .await }))
-  } else {
-    (None, None)
-  };
-
   let id_enum = format_ident!("{enum_name}Id");
 
   quote! {
     #[cfg(test)]
     impl #enum_name {
       #[track_caller]
-      pub #async_fn fn check_consistency() -> Result<(), diesel_enums::DbEnumError> {
-        #id_enum::check_consistency()#await_call
+      pub async fn check_consistency() -> Result<(), diesel_enums::DbEnumError> {
+        #id_enum::check_consistency().await
       }
     }
   }

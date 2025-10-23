@@ -20,7 +20,6 @@ default-skip-test = ["diesel-enum-checked/default-skip-test"]
 default-name-mapping = ["diesel-enum-checked/default-name-mapping"]
 no-default-id-mapping = ["diesel-enum-checked/no-default-id-mapping"]
 
-async-tests = ["diesel-enum-checked/async-tests"]
 
 default-runner-path = ["diesel-enum-checked/default-runner-path"]
 default-sqlite-runner = ["diesel-enum-checked/default-sqlite-runner"]

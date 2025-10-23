@@ -29,5 +29,3 @@ no-default-id-mapping = []
 default-runner-path = []
 default-sqlite-runner = []
 default-postgres-runner = []
-
-async-tests = []
