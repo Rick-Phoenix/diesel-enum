@@ -28,6 +28,7 @@ pub mod schema;
 static SQLITE_POOL: OnceCell<deadpool_diesel::sqlite::Pool> = OnceCell::const_new();
 static POSTGRES_POOL: OnceCell<deadpool_diesel::postgres::Pool> = OnceCell::const_new();
 
+#[cfg(test)]
 pub async fn postgres_testing_callback(
   callback: impl FnOnce(&mut PgConnection) -> Result<(), DbEnumError> + std::marker::Send + 'static,
 ) -> Result<(), DbEnumError> {

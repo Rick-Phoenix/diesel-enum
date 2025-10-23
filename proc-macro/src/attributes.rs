@@ -8,7 +8,7 @@ use syn::{
 
 use crate::{
   features::{
-    default_conn_function_path, default_name_mapping, default_postgres_runner,
+    default_name_mapping, default_postgres_runner, default_runner_path,
     default_skip_consistency_check, default_skip_test, default_sqlite_runner,
     no_default_id_mapping,
   },
@@ -465,8 +465,8 @@ impl<'a> Parse for Attributes<'a> {
       Check::Conn(quote! { diesel_enums::test_runners::sqlite_runner })
     } else if default_postgres_runner() {
       Check::Conn(quote! { diesel_enums::test_runners::postgres_runner })
-    } else if default_conn_function_path() {
-      Check::Conn(quote! { crate::db_enum_test_func::get_connection })
+    } else if default_runner_path() {
+      Check::Conn(quote! { crate::db_enum_test::test_runner })
     } else {
       return Err(error!(
         input.span(),

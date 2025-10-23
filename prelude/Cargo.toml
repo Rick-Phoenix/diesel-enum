@@ -14,7 +14,7 @@ default-skip-consistency-check = [
 ]
 default-skip-test = ["diesel-enum-checked/default-skip-test"]
 default-name-mapping = ["diesel-enum-checked/default-name-mapping"]
-default-conn-function-path = ["diesel-enum-checked/default-conn-function-path"]
+default-runner-path = ["diesel-enum-checked/default-runner-path"]
 no-default-id-mapping = ["diesel-enum-checked/no-default-id-mapping"]
 async-tests = ["diesel-enum-checked/async-tests"]
 default-sqlite-runner = [
