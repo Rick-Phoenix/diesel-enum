@@ -40,7 +40,7 @@ mod altered_casing {
 mod wrong_casing {
   use super::*;
 
-  #[diesel_enum(conn = crate::sqlite_testing_callback, name_mapping(default), id_mapping(skip))]
+  #[diesel_enum(conn = crate::sqlite_testing_callback, skip_test, name_mapping(default), id_mapping(skip))]
   enum Types {
     Grass,
     Poison,
@@ -83,7 +83,7 @@ mod wrong_casing {
 mod name_mismatch {
   use super::*;
 
-  #[diesel_enum(conn = crate::sqlite_testing_callback, case = "PascalCase", name_mapping(default), id_mapping(skip))]
+  #[diesel_enum(conn = crate::sqlite_testing_callback, skip_test, case = "PascalCase", name_mapping(default), id_mapping(skip))]
   enum Types {
     #[db_mapping(name = "abc")]
     Grass,
@@ -131,7 +131,7 @@ mod name_mismatch {
 mod id_mismatch {
   use super::*;
 
-  #[diesel_enum(conn = crate::sqlite_testing_callback, case = "PascalCase", name_mapping(default), id_mapping(default))]
+  #[diesel_enum(conn = crate::sqlite_testing_callback, skip_test, case = "PascalCase", name_mapping(default), id_mapping(default))]
   enum Types {
     #[db_mapping(id = 20)]
     Grass,
@@ -209,7 +209,7 @@ mod ignored_id_mismatch {
 mod skipped_ids {
   use super::*;
 
-  #[diesel_enum(conn = crate::sqlite_testing_callback, skip_ids(1..6, 6..=10), case = "PascalCase", name_mapping(default), id_mapping(default))]
+  #[diesel_enum(conn = crate::sqlite_testing_callback, skip_test, skip_ids(1..6, 6..=10), case = "PascalCase", name_mapping(default), id_mapping(default))]
   enum Types {
     Grass,
     Poison,
@@ -280,36 +280,5 @@ mod custom_table_name {
   #[tokio::test]
   async fn custom_table_name() {
     PokeTypes::check_consistency().await.unwrap();
-  }
-}
-
-mod using_default_runner {
-  use super::*;
-
-  #[diesel_enum(case = "PascalCase", name_mapping(default), id_mapping(skip))]
-  enum Types {
-    Grass,
-    Poison,
-    Fire,
-    Flying,
-    Water,
-    Bug,
-    Normal,
-    Electric,
-    Ground,
-    Fairy,
-    Fighting,
-    Psychic,
-    Rock,
-    Steel,
-    Ice,
-    Ghost,
-    Dragon,
-    Dark,
-  }
-
-  #[tokio::test]
-  async fn using_default_runner() {
-    Types::check_consistency().await.unwrap();
   }
 }

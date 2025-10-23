@@ -14,7 +14,7 @@ mod wrong_casing {
 
   use super::*;
 
-  #[diesel_enum(conn = crate::postgres_testing_callback, case = "UPPERCASE", name_mapping(name = "pokemon_type", path = crate::pg_schema::sql_types::PokemonType))]
+  #[diesel_enum(conn = crate::postgres_testing_callback, skip_test, case = "UPPERCASE", name_mapping(name = "pokemon_type", path = crate::pg_schema::sql_types::PokemonType))]
   enum PgTypes {
     Grass,
     Poison,
@@ -57,7 +57,7 @@ mod wrong_casing {
 mod missing_db_variant {
   use super::*;
 
-  #[diesel_enum(conn = crate::postgres_testing_callback,  name_mapping(name = "pokemon_type", path = crate::pg_schema::sql_types::PokemonType))]
+  #[diesel_enum(conn = crate::postgres_testing_callback, skip_test,  name_mapping(name = "pokemon_type", path = crate::pg_schema::sql_types::PokemonType))]
   enum PgTypes {
     // Grass,
     Poison,
@@ -99,7 +99,7 @@ mod missing_db_variant {
 mod extra_variant {
   use super::*;
 
-  #[diesel_enum(conn = crate::postgres_testing_callback,  name_mapping(name = "pokemon_type", path = crate::pg_schema::sql_types::PokemonType))]
+  #[diesel_enum(conn = crate::postgres_testing_callback, skip_test, name_mapping(name = "pokemon_type", path = crate::pg_schema::sql_types::PokemonType))]
   enum PgTypes {
     NotAPokemonType,
     Grass,

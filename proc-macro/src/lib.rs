@@ -1,6 +1,5 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
-pub(crate) mod features;
 #[macro_use]
 pub(crate) mod macros;
 pub(crate) mod attributes;

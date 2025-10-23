@@ -6,14 +6,7 @@ use syn::{
   parse::Parse, punctuated::Punctuated, Error, Expr, Ident, Lit, Meta, Path, RangeLimits, Token,
 };
 
-use crate::{
-  features::{
-    default_name_mapping, default_postgres_runner, default_runner_path,
-    default_skip_consistency_check, default_skip_test, default_sqlite_runner,
-    no_default_id_mapping,
-  },
-  Check, TokenStream2,
-};
+use crate::{Check, TokenStream2};
 
 pub struct Attributes<'a> {
   pub table_path: Option<TokenStream2>,
@@ -324,13 +317,12 @@ impl<'a> Parse for Attributes<'a> {
     let mut name_mapping: Option<NameMappingOrSkip> = None;
     let mut id_mapping: Option<IdMappingOrSkip> = None;
     let mut skip_test: Option<bool> = None;
-    let mut force_run_test: Option<bool> = None;
     let mut skip_ids: Option<Vec<Range<i32>>> = None;
 
     let punctuated_args = Punctuated::<Meta, Token![,]>::parse_terminated(input)?;
 
     let attributes_error_msg =
-      "Expected one of: `table_name`, `table`, `column`, `conn`, `skip_consistency_check`, `skip_ids`, `run_test`, `skip_test`, `case`, `id_mapping`, `name_mapping`";
+      "Expected one of: `table_name`, `table`, `column`, `conn`, `skip_consistency_check`, `skip_ids`, `skip_test`, `case`, `id_mapping`, `name_mapping`";
 
     for arg in punctuated_args {
       match arg {
@@ -365,18 +357,7 @@ impl<'a> Parse for Attributes<'a> {
         Meta::Path(path) => {
           let ident = path.require_ident()?;
 
-          if ident == "run_test" {
-            check_duplicate!(ident, force_run_test, "run_test");
-
-            if skip_test.is_some() {
-              return Err(spanned_error!(
-                ident,
-                "Cannot use `run_test` and `skip_test` together"
-              ));
-            }
-
-            force_run_test = Some(true);
-          } else if ident == "skip_consistency_check" {
+          if ident == "skip_consistency_check" {
             check_duplicate!(ident, conn, "skip_consistency_check");
 
             if matches!(conn, Some(Check::Conn(_))) {
@@ -389,13 +370,6 @@ impl<'a> Parse for Attributes<'a> {
             conn = Some(Check::Skip);
           } else if ident == "skip_test" {
             check_duplicate!(ident, skip_test);
-
-            if force_run_test.is_some() {
-              return Err(spanned_error!(
-                ident,
-                "Cannot use `run_test` and `skip_test` together"
-              ));
-            }
 
             skip_test = Some(true);
           } else {
@@ -459,14 +433,6 @@ impl<'a> Parse for Attributes<'a> {
 
     let conn = if let Some(input) = conn {
       input
-    } else if default_postgres_runner() {
-      Check::Conn(quote! { test_runners::postgres_runner })
-    } else if default_sqlite_runner() {
-      Check::Conn(quote! { test_runners::sqlite_runner })
-    } else if default_runner_path() {
-      Check::Conn(quote! { crate::db_enum_test::test_runner })
-    } else if default_skip_consistency_check() {
-      Check::Skip
     } else {
       return Err(error!(
         input.span(),
@@ -485,8 +451,6 @@ impl<'a> Parse for Attributes<'a> {
 
         NameMappingOrSkip::Skip => None,
       }
-    } else if default_name_mapping() {
-      Some(NameMapping::default())
     } else {
       None
     };
@@ -498,8 +462,6 @@ impl<'a> Parse for Attributes<'a> {
         IdMappingOrSkip::IdMapping(mapping) => Some(mapping),
         IdMappingOrSkip::Skip => None,
       }
-    } else if !no_default_id_mapping() {
-      Some(IdMapping::default())
     } else {
       None
     };
@@ -512,8 +474,6 @@ impl<'a> Parse for Attributes<'a> {
 
     let table_path = table_path.map(|path| path.to_token_stream());
 
-    let skip_test = force_run_test.unwrap_or_else(|| skip_test.unwrap_or_else(default_skip_test));
-
     Ok(Attributes {
       table_name,
       table_path,
@@ -522,7 +482,7 @@ impl<'a> Parse for Attributes<'a> {
       case: case.unwrap_or(Case::Snake),
       id_mapping,
       name_mapping,
-      skip_test,
+      skip_test: skip_test.unwrap_or_default(),
       skip_ranges: skip_ids.unwrap_or_default(),
     })
   }

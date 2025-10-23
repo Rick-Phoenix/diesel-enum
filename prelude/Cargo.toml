@@ -11,16 +11,3 @@ diesel-enum-checked = { path = "../proc-macro/" }
 default = ["pretty-test-errors"]
 
 pretty-test-errors = ["diesel-enums-core/pretty-test-errors"]
-
-default-skip-consistency-check = [
-  "diesel-enum-checked/default-skip-consistency-check",
-]
-default-skip-test = ["diesel-enum-checked/default-skip-test"]
-
-default-name-mapping = ["diesel-enum-checked/default-name-mapping"]
-no-default-id-mapping = ["diesel-enum-checked/no-default-id-mapping"]
-
-
-default-runner-path = ["diesel-enum-checked/default-runner-path"]
-default-sqlite-runner = ["diesel-enum-checked/default-sqlite-runner"]
-default-postgres-runner = ["diesel-enum-checked/default-postgres-runner"]
