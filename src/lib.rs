@@ -18,7 +18,8 @@ use syn::{parse_macro_input, Error, ItemEnum};
 use crate::{
   attributes::{Attributes, IdMapping, NameMapping},
   conversions::{
-    enum_int_conversions, enum_to_enum_conversion, sql_int_conversions, sql_string_conversions,
+    enum_int_conversions, enum_to_enum_conversion, postgres_enum_conversions, sql_int_conversions,
+    sql_string_conversions,
   },
   process_variants::{process_variants, VariantData},
   test_generation::{check_consistency_inter_call, test_with_id, test_without_id},
@@ -98,9 +99,15 @@ pub fn diesel_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
       #orig_input
     });
 
-    let sql_string_conversions = sql_string_conversions(&enum_name, &sql_type_path, &variants_data);
+    let is_custom_type = db_type.is_custom();
 
-    enum_impls.extend(sql_string_conversions);
+    let sql_conversions = if is_custom_type {
+      postgres_enum_conversions(&enum_name, &sql_type_path, &variants_data)
+    } else {
+      sql_string_conversions(&enum_name, &sql_type_path, &variants_data)
+    };
+
+    enum_impls.extend(sql_conversions);
 
     if let Check::Conn(connection_func) = &conn {
       let test_impl = if id_mapping.is_none() {

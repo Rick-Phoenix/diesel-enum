@@ -226,7 +226,11 @@ pub fn test_without_id(
           pub variant: String
         }
 
-        diesel::sql_query(concat!(r#"SELECT unnest(enum_range(NULL::"#, #db_enum_name, ")) AS variant"))
+        let result: Vec<DbEnum> = diesel::sql_query(concat!(r#"SELECT unnest(enum_range(NULL::"#, #db_enum_name, ")) AS variant"))
+          .load(conn)
+          .unwrap_or_else(|e| panic!("\n ❌ Failed to load the variants for the rust enum `{enum_name}` from the database enum `{target_name}`: {e}"));
+
+        result.into_iter().map(|res| res.variant).collect()
       },
       db_enum_name.clone(),
     )
@@ -237,6 +241,8 @@ pub fn test_without_id(
       quote! {
         #table_path::table
           .select(#table_path::#column_name_ident)
+          .load(conn)
+          .unwrap_or_else(|e| panic!("\n ❌ Failed to load the variants for the rust enum `{enum_name}` from the database column `{target_name}`: {e}"))
       },
       format!("{table_name}.{column_name}"),
     )
@@ -338,13 +344,9 @@ pub fn test_without_id(
               [ #(#variant_db_names),* ]
             });
 
-            let query = {
+            let db_variants: Vec<String> = {
               #names_query
             };
-
-            let db_variants: Vec<String> = query
-            .load(conn)
-            .unwrap_or_else(|e| panic!("\n ❌ Failed to load the variants for the rust enum `{enum_name}` from the database {source_type} `{target_name}`: {e}"));
 
             let mut missing_variants: Vec<String> = Vec::new();
 

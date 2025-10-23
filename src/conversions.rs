@@ -1,6 +1,6 @@
 use proc_macro2::Span;
 use quote::{format_ident, quote};
-use syn::{Ident, LitInt};
+use syn::{Ident, LitByteStr, LitInt};
 
 use crate::{traverse_enum, TokenStream2, VariantData};
 
@@ -85,6 +85,51 @@ pub fn sql_int_conversions(
         match self {
           #to_sql_conversion
         }
+      }
+    }
+  }
+}
+
+pub fn postgres_enum_conversions(
+  enum_name: &Ident,
+  sql_type_path: &TokenStream2,
+  variants_data: &[VariantData],
+) -> TokenStream2 {
+  let mut conversion_to_bytes = TokenStream2::new();
+  let mut conversion_from_bytes = TokenStream2::new();
+
+  for data in variants_data {
+    let db_name_bytes = LitByteStr::new(data.db_name.as_bytes(), Span::call_site());
+    let variant_ident = &data.ident;
+
+    conversion_to_bytes.extend(quote! {
+      Self::#variant_ident => out.write_all(#db_name_bytes)?,
+    });
+
+    conversion_from_bytes.extend(quote! {
+      #db_name_bytes => Ok(Self::#variant_ident),
+    });
+  }
+
+  quote! {
+    impl diesel::deserialize::FromSql<#sql_type_path, diesel::pg::Pg> for #enum_name
+    {
+      fn from_sql(bytes: diesel::pg::PgValue<'_>) -> diesel::deserialize::Result<Self> {
+        match bytes.as_bytes() {
+          #conversion_from_bytes
+          unknown => Err(Box::from(format!("Unknown `{}` variant: {}", stringify!(#enum_name), String::from_utf8_lossy(unknown)))),
+        }
+      }
+    }
+
+    impl diesel::serialize::ToSql<#sql_type_path, diesel::pg::Pg> for #enum_name
+    {
+      fn to_sql<'b>(&'b self, out: &mut diesel::serialize::Output<'b, '_, diesel::pg::Pg>) -> diesel::serialize::Result {
+        use std::io::Write;
+        match *self {
+          #conversion_to_bytes
+        };
+        Ok(diesel::serialize::IsNull::No)
       }
     }
   }
