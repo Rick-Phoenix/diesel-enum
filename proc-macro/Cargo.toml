@@ -22,9 +22,12 @@ proc-macro = true
 [features]
 default-skip-consistency-check = []
 default-skip-test = []
+
 default-name-mapping = []
+no-default-id-mapping = []
+
 default-runner-path = []
 default-sqlite-runner = []
 default-postgres-runner = []
-no-default-id-mapping = []
+
 async-tests = []

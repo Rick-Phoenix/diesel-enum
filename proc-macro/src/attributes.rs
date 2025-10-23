@@ -459,14 +459,14 @@ impl<'a> Parse for Attributes<'a> {
 
     let conn = if let Some(input) = conn {
       input
-    } else if default_skip_consistency_check() {
-      Check::Skip
-    } else if default_sqlite_runner() {
-      Check::Conn(quote! { test_runners::sqlite_runner })
     } else if default_postgres_runner() {
       Check::Conn(quote! { test_runners::postgres_runner })
+    } else if default_sqlite_runner() {
+      Check::Conn(quote! { test_runners::sqlite_runner })
     } else if default_runner_path() {
       Check::Conn(quote! { crate::db_enum_test::test_runner })
+    } else if default_skip_consistency_check() {
+      Check::Skip
     } else {
       return Err(error!(
         input.span(),

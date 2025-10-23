@@ -8,14 +8,20 @@ diesel-enums-core = { path = "../core" }
 diesel-enum-checked = { path = "../proc-macro/" }
 
 [features]
+default = ["pretty-test-errors"]
+
 pretty-test-errors = ["diesel-enums-core/pretty-test-errors"]
+
 default-skip-consistency-check = [
   "diesel-enum-checked/default-skip-consistency-check",
 ]
 default-skip-test = ["diesel-enum-checked/default-skip-test"]
+
 default-name-mapping = ["diesel-enum-checked/default-name-mapping"]
-default-runner-path = ["diesel-enum-checked/default-runner-path"]
 no-default-id-mapping = ["diesel-enum-checked/no-default-id-mapping"]
+
 async-tests = ["diesel-enum-checked/async-tests"]
+
+default-runner-path = ["diesel-enum-checked/default-runner-path"]
 default-sqlite-runner = ["diesel-enum-checked/default-sqlite-runner"]
 default-postgres-runner = ["diesel-enum-checked/default-postgres-runner"]
