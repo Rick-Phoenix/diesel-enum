@@ -1,5 +1,5 @@
 use diesel::prelude::*;
-use diesel_enum_checked::diesel_enum;
+use diesel_enums::diesel_enum;
 
 use crate::{pg_schema, schema::*};
 

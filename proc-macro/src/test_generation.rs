@@ -2,11 +2,7 @@ use convert_case::{Case, Casing};
 use quote::{format_ident, quote};
 use syn::Ident;
 
-use crate::{
-  attributes::NameTypes,
-  features::{async_tests, pretty_test_errors},
-  TokenStream2, VariantData,
-};
+use crate::{attributes::NameTypes, features::async_tests, TokenStream2, VariantData};
 
 pub fn test_with_id(
   enum_name: &Ident,
@@ -52,62 +48,6 @@ pub fn test_with_id(
     (None, None)
   };
 
-  let desync_error_message = if pretty_test_errors() {
-    quote! {
-      writeln!(error_message, "\n ❌ The rust enum `{}` and the database column `{}.{}` are out of sync: ", enum_name.bright_yellow(), table_name.bright_cyan(), column_name.bright_cyan()).unwrap();
-    }
-  } else {
-    quote! {
-      writeln!(error_message, "\n ❌ The rust enum `{enum_name}` and the database column `{table_name}.{column_name}` are out of sync: ").unwrap();
-    }
-  };
-
-  let missing_rust_variants_error = if pretty_test_errors() {
-    quote! {
-      writeln!(error_message, "\n  - Variants missing from the {}:", "rust enum".bright_yellow()).unwrap();
-      for variant in &missing_variants {
-        writeln!(error_message, "    • {variant}").unwrap();
-      }
-    }
-  } else {
-    quote! {
-      writeln!(error_message, "\n  - Variants missing from the rust enum: [ {} ]", missing_variants.join(", ")).unwrap();
-    }
-  };
-
-  let missing_db_variants_error = if pretty_test_errors() {
-    quote! {
-      writeln!(error_message, "\n  - Variants missing from the {}:", "database".bright_cyan()).unwrap();
-      for variant in &excess_variants {
-        writeln!(error_message, "    • {variant}").unwrap();
-      }
-    }
-  } else {
-    quote! {
-      writeln!(error_message, "\n  - Variants missing from the database: [ {} ]", excess_variants.join(", ")).unwrap();
-    }
-  };
-
-  let id_mismatch_error = if pretty_test_errors() {
-    quote! {
-      writeln!(error_message, "\n  - Wrong id mapping for `{}`", name.bright_yellow()).unwrap();
-      writeln!(error_message, "    Expected: {}", expected.bright_green()).unwrap();
-      writeln!(error_message, "    Found: {}", found.bright_red()).unwrap();
-    }
-  } else {
-    quote! {
-      writeln!(error_message, "\n  - Wrong id mapping for `{name}`").unwrap();
-      writeln!(error_message, "    Expected: {expected}").unwrap();
-      writeln!(error_message, "    Found: {found}").unwrap();
-    }
-  };
-
-  let owo_import = if pretty_test_errors() {
-    Some(quote! { use owo_colors::OwoColorize; })
-  } else {
-    None
-  };
-
   let auto_test = if !skip_test {
     let test_label = if async_tests() {
       quote! { #[tokio::test] }
@@ -120,7 +60,7 @@ pub fn test_with_id(
     Some(quote! {
       #test_label
       #async_fn fn #test_func_name() {
-        #enum_name::check_consistency()#await_call;
+        #enum_name::check_consistency()#await_call.unwrap();
       }
     })
   } else {
@@ -134,11 +74,10 @@ pub fn test_with_id(
       use diesel::prelude::*;
       use std::collections::HashMap;
       use std::fmt::Write;
-      #owo_import
 
       impl #enum_name {
         #[track_caller]
-        pub #async_fn fn check_consistency()
+        pub #async_fn fn check_consistency() -> Result<(), diesel_enums::DbEnumError>
         {
           #conn_callback(|conn| {
             let enum_name = #enum_name_str;
@@ -150,13 +89,13 @@ pub fn test_with_id(
             };
 
             let db_variants: Vec<(#id_rust_type, String)> = #table_path::table
-            .select((#table_path::id, #table_path::#column_name_ident))
-            .load(conn)
-            .unwrap_or_else(|e| panic!("\n ❌ Failed to load the variants for the rust enum `{enum_name}` from the database column `{table_name}.{column_name}`: {e}"));
+              .select((#table_path::id, #table_path::#column_name_ident))
+              .load(conn)
+              .unwrap_or_else(|e| panic!("\n ❌ Failed to load the variants for the rust enum `{enum_name}` from the database column `{table_name}.{column_name}`: {e}"));
 
             let mut missing_variants: Vec<String> = Vec::new();
 
-            let mut id_mismatches: Vec<(String, #id_rust_type, #id_rust_type)> = Vec::new();
+            let mut id_mismatches: Vec<(String, i64, i64)> = Vec::new();
 
             for (id, name) in db_variants {
               let variant_id = if let Some(variant) = rust_variants.remove(name.as_str()) {
@@ -167,35 +106,35 @@ pub fn test_with_id(
               };
 
               if id != variant_id {
-                id_mismatches.push((name, id, variant_id));
+                id_mismatches.push((name, id as i64, variant_id as i64));
               }
             }
 
             if !missing_variants.is_empty() || !rust_variants.is_empty() || !id_mismatches.is_empty() {
-              let mut error_message = String::new();
+              let mut error = diesel_enums::DbEnumError::new(enum_name.to_string(), diesel_enums::DbEnumSource::Column { table: table_name.to_string(), column: column_name.to_string() });
 
-              #desync_error_message
-
-              for ((name, expected, found)) in id_mismatches {
-                #id_mismatch_error
+              if !id_mismatches.is_empty() {
+                error.errors.push(diesel_enums::ErrorKind::IdMismatches(id_mismatches));
               }
 
               if !missing_variants.is_empty() {
                 missing_variants.sort();
 
-                #missing_rust_variants_error
+                error.errors.push(diesel_enums::ErrorKind::MissingFromRustEnum(missing_variants));
               }
 
               if !rust_variants.is_empty() {
-                let mut excess_variants: Vec<&str> = rust_variants.into_iter().map(|(name, _)| name).collect();
+                let mut excess_variants: Vec<String> = rust_variants.into_iter().map(|(name, _)| name.to_string()).collect();
                 excess_variants.sort();
 
-                #missing_db_variants_error
+                error.errors.push(diesel_enums::ErrorKind::MissingFromDb(excess_variants));
               }
 
-              panic!("{error_message}");
+              Err(error)
+            } else {
+              Ok(())
             }
-          })#await_call;
+          })#await_call
         }
       }
 
@@ -215,9 +154,7 @@ pub fn test_without_id(
   variants_data: &[VariantData],
   skip_test: bool,
 ) -> TokenStream2 {
-  let is_custom = db_type.is_custom();
-
-  let (names_query, target_name) = if let NameTypes::Custom { name: db_enum_name } = db_type {
+  let (names_query, source_type) = if let NameTypes::Custom { name: db_enum_name } = db_type {
     (
       quote! {
         #[derive(diesel::deserialize::QueryableByName)]
@@ -228,11 +165,11 @@ pub fn test_without_id(
 
         let result: Vec<DbEnum> = diesel::sql_query(concat!(r#"SELECT unnest(enum_range(NULL::"#, #db_enum_name, ")) AS variant"))
           .load(conn)
-          .unwrap_or_else(|e| panic!("\n ❌ Failed to load the variants for the rust enum `{enum_name}` from the database enum `{target_name}`: {e}"));
+          .unwrap_or_else(|e| panic!("\n ❌ Failed to load the variants for the rust enum `{enum_name}` from the database enum `{}`: {e}", #db_enum_name));
 
         result.into_iter().map(|res| res.variant).collect()
       },
-      db_enum_name.clone(),
+      quote! { diesel_enums::DbEnumSource::CustomEnum(#db_enum_name.to_string()) },
     )
   } else {
     let column_name_ident = format_ident!("{column_name}");
@@ -242,9 +179,9 @@ pub fn test_without_id(
         #table_path::table
           .select(#table_path::#column_name_ident)
           .load(conn)
-          .unwrap_or_else(|e| panic!("\n ❌ Failed to load the variants for the rust enum `{enum_name}` from the database column `{target_name}`: {e}"))
+          .unwrap_or_else(|e| panic!("\n ❌ Failed to load the variants for the rust enum `{enum_name}` from the database column `{}.{}`: {e}", #table_name, #column_name))
       },
-      format!("{table_name}.{column_name}"),
+      quote! { diesel_enums::DbEnumSource::Column { table: #table_name.to_string(), column: #column_name.to_string() } },
     )
   };
 
@@ -252,54 +189,10 @@ pub fn test_without_id(
 
   let variant_db_names = variants_data.iter().map(|data| &data.db_name);
 
-  let source_type = if is_custom { "enum" } else { "column" };
-
   let (async_fn, await_call) = if async_tests() {
     (Some(quote! { async }), Some(quote! { .await }))
   } else {
     (None, None)
-  };
-
-  let desync_error_message = if pretty_test_errors() {
-    quote! {
-      writeln!(error_message, "\n ❌ The rust enum `{}` and the database {source_type} `{}` are out of sync: ", enum_name.bright_yellow(), target_name.bright_cyan()).unwrap();
-    }
-  } else {
-    quote! {
-      writeln!(error_message, "\n ❌ The rust enum `{enum_name}` and the database {source_type} `{target_name}` are out of sync: ").unwrap();
-    }
-  };
-
-  let missing_rust_variants_error = if pretty_test_errors() {
-    quote! {
-      writeln!(error_message, "\n  - Variants missing from the {}:", "rust enum".bright_yellow()).unwrap();
-      for variant in &missing_variants {
-        writeln!(error_message, "    • {variant}").unwrap();
-      }
-    }
-  } else {
-    quote! {
-      writeln!(error_message, "\n  - Variants missing from the rust enum: [ {} ]", missing_variants.join(", ")).unwrap();
-    }
-  };
-
-  let missing_db_variants_error = if pretty_test_errors() {
-    quote! {
-      writeln!(error_message, "\n  - Variants missing from the {}:", "database".bright_cyan()).unwrap();
-      for variant in &excess_variants {
-        writeln!(error_message, "    • {variant}").unwrap();
-      }
-    }
-  } else {
-    quote! {
-      writeln!(error_message, "\n  - Variants missing from the database: [ {} ]", excess_variants.join(", ")).unwrap();
-    }
-  };
-
-  let owo_import = if pretty_test_errors() {
-    Some(quote! { use owo_colors::OwoColorize; })
-  } else {
-    None
   };
 
   let auto_test = if !skip_test {
@@ -314,7 +207,7 @@ pub fn test_without_id(
     Some(quote! {
       #test_label
       #async_fn fn #test_func_name() {
-        #enum_name::check_consistency()#await_call;
+        #enum_name::check_consistency()#await_call.unwrap();
       }
     })
   } else {
@@ -328,17 +221,13 @@ pub fn test_without_id(
       use diesel::prelude::*;
       use std::collections::HashSet;
       use std::fmt::Write;
-      #owo_import
-
 
       impl #enum_name {
         #[track_caller]
-        pub #async_fn fn check_consistency()
+        pub #async_fn fn check_consistency() -> Result<(), diesel_enums::DbEnumError>
         {
           #conn_callback(|conn| {
-            let source_type = #source_type;
             let enum_name = #enum_name_str;
-            let target_name = #target_name;
 
             let mut rust_variants = HashSet::from({
               [ #(#variant_db_names),* ]
@@ -359,26 +248,26 @@ pub fn test_without_id(
             }
 
             if !missing_variants.is_empty() || !rust_variants.is_empty() {
-              let mut error_message = String::new();
-
-              #desync_error_message
+              let mut error = diesel_enums::DbEnumError::new(enum_name.to_string(), #source_type);
 
               if !missing_variants.is_empty() {
                 missing_variants.sort();
 
-                #missing_rust_variants_error
+                error.errors.push(diesel_enums::ErrorKind::MissingFromRustEnum(missing_variants));
               }
 
               if !rust_variants.is_empty() {
-                let mut excess_variants: Vec<&str> = rust_variants.into_iter().collect();
+                let mut excess_variants: Vec<String> = rust_variants.into_iter().map(|name| name.to_string()).collect();
                 excess_variants.sort();
 
-                #missing_db_variants_error
+                error.errors.push(diesel_enums::ErrorKind::MissingFromDb(excess_variants));
               }
 
-              panic!("{error_message}");
+              Err(error)
+            } else {
+              Ok(())
             }
-          })#await_call;
+          })#await_call
         }
       }
 
@@ -400,7 +289,7 @@ pub fn check_consistency_inter_call(enum_name: &Ident) -> TokenStream2 {
     #[cfg(test)]
     impl #enum_name {
       #[track_caller]
-      pub #async_fn fn check_consistency() {
+      pub #async_fn fn check_consistency() -> Result<(), diesel_enums::DbEnumError> {
         #id_enum::check_consistency()#await_call
       }
     }

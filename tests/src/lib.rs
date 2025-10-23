@@ -7,6 +7,7 @@ use deadpool_diesel::{
 };
 use deadpool_sync::SyncWrapper;
 use diesel::{prelude::*, SqliteConnection};
+use diesel_enums::DbEnumError;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use dotenvy::dotenv;
 use pgtemp::PgTempDB;
@@ -28,8 +29,8 @@ static SQLITE_POOL: OnceCell<deadpool_diesel::sqlite::Pool> = OnceCell::const_ne
 static POSTGRES_POOL: OnceCell<deadpool_diesel::postgres::Pool> = OnceCell::const_new();
 
 pub async fn postgres_testing_callback(
-  callback: impl FnOnce(&mut PgConnection) + std::marker::Send + 'static,
-) {
+  callback: impl FnOnce(&mut PgConnection) -> Result<(), DbEnumError> + std::marker::Send + 'static,
+) -> Result<(), DbEnumError> {
   POSTGRES_POOL
     .get_or_init(|| async { create_pg_pool().await })
     .await
@@ -72,8 +73,8 @@ pub async fn run_sqlite_query<T: Send + 'static>(
 }
 
 pub async fn sqlite_testing_callback(
-  callback: impl FnOnce(&mut SqliteConnection) + std::marker::Send + 'static,
-) {
+  callback: impl FnOnce(&mut SqliteConnection) -> Result<(), DbEnumError> + std::marker::Send + 'static,
+) -> Result<(), DbEnumError> {
   SQLITE_POOL
     .get_or_init(|| async { create_sqlite_pool() })
     .await
@@ -82,7 +83,7 @@ pub async fn sqlite_testing_callback(
     .expect("Could not get a connection")
     .interact(callback)
     .await
-    .expect("Testing outcome was unsuccessful")
+    .expect("Sqlite pool thread crashed")
 }
 
 // Needs to be put here to avoid being dropped earlier

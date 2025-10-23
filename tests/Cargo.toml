@@ -9,7 +9,7 @@ owo-colors = "4"
 [dependencies]
 diesel_migrations = "2.3.0"
 pgtemp = "0.6.0"
-diesel-enum-checked = { path = "..", features = [
+diesel-enums = { path = "../prelude", features = [
   "async-tests",
   "pretty-test-errors",
   "default-skip-test",

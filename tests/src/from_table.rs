@@ -1,8 +1,8 @@
-use diesel_enum_checked::diesel_enum;
+use diesel_enums::diesel_enum;
 
 #[tokio::test]
 async fn you_shall_pass() {
-  crate::models::TypesId::check_consistency().await;
+  crate::models::TypesId::check_consistency().await.unwrap();
 }
 
 mod altered_casing {
@@ -33,7 +33,7 @@ mod altered_casing {
 
   #[tokio::test]
   async fn altered_casing() {
-    Types::check_consistency().await;
+    Types::check_consistency().await.unwrap();
   }
 }
 
@@ -65,7 +65,7 @@ mod wrong_casing {
   #[tokio::test]
   #[should_panic]
   async fn wrong_casing() {
-    Types::check_consistency().await;
+    Types::check_consistency().await.unwrap();
   }
 }
 
@@ -98,7 +98,7 @@ mod name_mismatch {
   #[tokio::test]
   #[should_panic]
   async fn name_mismatch() {
-    Types::check_consistency().await;
+    Types::check_consistency().await.unwrap();
   }
 }
 
@@ -131,7 +131,7 @@ mod id_mismatch {
   #[tokio::test]
   #[should_panic]
   async fn id_mismatch() {
-    Types::check_consistency().await;
+    Types::check_consistency().await.unwrap();
   }
 }
 
@@ -163,7 +163,7 @@ mod ignored_id_mismatch {
 
   #[tokio::test]
   async fn ignored_id_mismatch() {
-    Types::check_consistency().await;
+    Types::check_consistency().await.unwrap();
   }
 }
 
@@ -195,7 +195,7 @@ mod skipped_ids {
   #[tokio::test]
   #[should_panic]
   async fn skipped_ids() {
-    Types::check_consistency().await;
+    Types::check_consistency().await.unwrap();
   }
 }
 
@@ -226,6 +226,6 @@ mod custom_table_name {
 
   #[tokio::test]
   async fn custom_table_name() {
-    PokeTypes::check_consistency().await;
+    PokeTypes::check_consistency().await.unwrap();
   }
 }

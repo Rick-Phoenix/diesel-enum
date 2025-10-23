@@ -1,0 +1,19 @@
+[package]
+name = "diesel-enums"
+version = "0.1.0"
+edition.workspace = true
+
+[dependencies]
+diesel-enums-core = { path = "../core" }
+diesel-enum-checked = { path = "../proc-macro/" }
+
+[features]
+pretty-test-errors = ["diesel-enums-core/pretty-test-errors"]
+default-skip-consistency-check = [
+  "diesel-enum-checked/default-skip-consistency-check",
+]
+default-skip-test = ["diesel-enum-checked/default-skip-test"]
+default-name-mapping = ["diesel-enum-checked/default-name-mapping"]
+default-conn-function-path = ["diesel-enum-checked/default-conn-function-path"]
+no-default-id-mapping = ["diesel-enum-checked/no-default-id-mapping"]
+async-tests = ["diesel-enum-checked/async-tests"]

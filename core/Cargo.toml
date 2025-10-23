@@ -1,0 +1,11 @@
+[package]
+name = "diesel-enums-core"
+version = "0.1.0"
+edition.workspace = true
+
+[dependencies]
+owo-colors = { version = "4", optional = true, features = ["supports-colors"] }
+thiserror = "2"
+
+[features]
+pretty-test-errors = ["dep:owo-colors"]

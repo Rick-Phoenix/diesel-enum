@@ -1,4 +1,4 @@
-use diesel_enum_checked::diesel_enum;
+use diesel_enums::diesel_enum;
 
 use crate::{
   models::{PgTable, PgTypes},
@@ -7,7 +7,7 @@ use crate::{
 
 #[tokio::test]
 async fn you_shall_pass() {
-  PgTypes::check_consistency().await;
+  PgTypes::check_consistency().await.unwrap();
 }
 
 mod wrong_casing {
@@ -38,7 +38,7 @@ mod wrong_casing {
   #[tokio::test]
   #[should_panic]
   async fn wrong_casing() {
-    PgTypes::check_consistency().await;
+    PgTypes::check_consistency().await.unwrap();
   }
 }
 
@@ -70,7 +70,7 @@ mod missing_db_variant {
   #[tokio::test]
   #[should_panic]
   async fn missing_db_variant() {
-    PgTypes::check_consistency().await;
+    PgTypes::check_consistency().await.unwrap();
   }
 }
 
@@ -103,7 +103,7 @@ mod extra_variant {
   #[tokio::test]
   #[should_panic]
   async fn extra_variant() {
-    PgTypes::check_consistency().await;
+    PgTypes::check_consistency().await.unwrap();
   }
 }
 
