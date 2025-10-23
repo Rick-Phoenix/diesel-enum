@@ -1,4 +1,4 @@
-use diesel_enums::diesel_enum;
+use diesel_enums::{diesel_enum, ErrorKind};
 
 #[tokio::test]
 async fn you_shall_pass() {
@@ -63,9 +63,20 @@ mod wrong_casing {
   }
 
   #[tokio::test]
-  #[should_panic]
   async fn wrong_casing() {
-    Types::check_consistency().await.unwrap();
+    let errors = Types::check_consistency().await.unwrap_err().errors;
+
+    assert_eq!(errors.len(), 2);
+
+    assert!(errors.iter().any(|e| {
+      if let ErrorKind::MissingFromDb(items) = e {
+        items.len() == 18
+      } else if let ErrorKind::MissingFromRustEnum(items) = e {
+        items.len() == 18
+      } else {
+        false
+      }
+    }));
   }
 }
 
@@ -96,9 +107,24 @@ mod name_mismatch {
   }
 
   #[tokio::test]
-  #[should_panic]
   async fn name_mismatch() {
-    Types::check_consistency().await.unwrap();
+    let errors = Types::check_consistency().await.unwrap_err().errors;
+
+    assert_eq!(errors.len(), 2);
+
+    assert!(errors.iter().any(|e| {
+      if let ErrorKind::MissingFromDb(items) = e {
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0], "abc");
+        true
+      } else if let ErrorKind::MissingFromRustEnum(items) = e {
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0], "Grass");
+        true
+      } else {
+        false
+      }
+    }));
   }
 }
 
@@ -129,9 +155,22 @@ mod id_mismatch {
   }
 
   #[tokio::test]
-  #[should_panic]
   async fn id_mismatch() {
-    Types::check_consistency().await.unwrap();
+    let errors = Types::check_consistency().await.unwrap_err().errors;
+
+    assert_eq!(errors.len(), 1);
+
+    let e = errors.get(0).unwrap();
+
+    if let ErrorKind::IdMismatches(items) = e {
+      let (name, expected, found) = items.get(0).unwrap();
+
+      assert_eq!(name, "Grass");
+      assert_eq!(*expected, 1);
+      assert_eq!(*found, 20);
+    } else {
+      panic!();
+    }
   }
 }
 
@@ -193,9 +232,23 @@ mod skipped_ids {
   }
 
   #[tokio::test]
-  #[should_panic]
   async fn skipped_ids() {
-    Types::check_consistency().await.unwrap();
+    let errors = Types::check_consistency().await.unwrap_err().errors;
+
+    assert_eq!(errors.len(), 1);
+
+    let e = errors.get(0).unwrap();
+
+    if let ErrorKind::IdMismatches(items) = e {
+      assert_eq!(items.len(), 18);
+
+      for (i, (_, expected, found)) in items.iter().enumerate() {
+        assert_eq!(*expected, (i + 1) as i64);
+        assert_eq!(*found, (i + 11) as i64);
+      }
+    } else {
+      panic!();
+    }
   }
 }
 

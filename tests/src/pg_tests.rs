@@ -1,4 +1,4 @@
-use diesel_enums::diesel_enum;
+use diesel_enums::{diesel_enum, ErrorKind};
 
 use crate::{
   models::{PgTable, PgTypes},
@@ -11,6 +11,7 @@ async fn you_shall_pass() {
 }
 
 mod wrong_casing {
+
   use super::*;
 
   #[diesel_enum(conn = crate::postgres_testing_callback, case = "UPPERCASE", name_mapping(name = "pokemon_type", path = crate::pg_schema::sql_types::PokemonType))]
@@ -36,9 +37,20 @@ mod wrong_casing {
   }
 
   #[tokio::test]
-  #[should_panic]
   async fn wrong_casing() {
-    PgTypes::check_consistency().await.unwrap();
+    let errors = PgTypes::check_consistency().await.unwrap_err().errors;
+
+    assert_eq!(errors.len(), 2);
+
+    assert!(errors.iter().any(|e| {
+      if let ErrorKind::MissingFromDb(items) = e {
+        items.len() == 18
+      } else if let ErrorKind::MissingFromRustEnum(items) = e {
+        items.len() == 18
+      } else {
+        false
+      }
+    }));
   }
 }
 
@@ -68,9 +80,19 @@ mod missing_db_variant {
   }
 
   #[tokio::test]
-  #[should_panic]
   async fn missing_db_variant() {
-    PgTypes::check_consistency().await.unwrap();
+    let errors = PgTypes::check_consistency().await.unwrap_err().errors;
+
+    assert_eq!(errors.len(), 1);
+
+    let e = errors.get(0).unwrap();
+
+    if let ErrorKind::MissingFromRustEnum(items) = e {
+      assert!(items.len() == 1);
+      assert_eq!(items[0], "grass");
+    } else {
+      panic!();
+    };
   }
 }
 
@@ -101,9 +123,19 @@ mod extra_variant {
   }
 
   #[tokio::test]
-  #[should_panic]
   async fn extra_variant() {
-    PgTypes::check_consistency().await.unwrap();
+    let errors = PgTypes::check_consistency().await.unwrap_err().errors;
+
+    assert_eq!(errors.len(), 1);
+
+    let e = errors.get(0).unwrap();
+
+    if let ErrorKind::MissingFromDb(items) = e {
+      assert!(items.len() == 1);
+      assert_eq!(items[0], "not_a_pokemon_type");
+    } else {
+      panic!();
+    };
   }
 }
 

@@ -73,7 +73,6 @@ pub fn test_with_id(
       use super::*;
       use diesel::prelude::*;
       use std::collections::HashMap;
-      use std::fmt::Write;
 
       impl #enum_name {
         #[track_caller]
@@ -220,7 +219,6 @@ pub fn test_without_id(
       use super::*;
       use diesel::prelude::*;
       use std::collections::HashSet;
-      use std::fmt::Write;
 
       impl #enum_name {
         #[track_caller]
