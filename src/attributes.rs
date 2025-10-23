@@ -239,8 +239,8 @@ impl Parse for NameMappingOrSkip {
         } else {
           return Ok(Self::Skip);
         }
-      } else if ident == "type" {
-        check_duplicate!(ident, custom_type_path, "type");
+      } else if ident == "path" {
+        check_duplicate!(ident, custom_type_path, "path");
 
         let type_path = extract_path(arg.require_name_value()?.clone().value)?;
 
@@ -255,7 +255,7 @@ impl Parse for NameMappingOrSkip {
         return Err(spanned_error!(
           ident,
           format!(
-            "Unknown attribute `{ident}`. Expected one of: `skip`, `default`, `type`, `name`"
+            "Unknown attribute `{ident}`. Expected one of: `skip`, `default`, `path`, `name`"
           )
         ));
       }
@@ -450,9 +450,15 @@ impl<'a> Parse for Attributes<'a> {
       ));
     };
 
+    let mut is_custom_type = false;
+
     let name_mapping = if let Some(mapping) = name_mapping {
       match mapping {
-        NameMappingOrSkip::NameMapping(mapping) => Some(mapping),
+        NameMappingOrSkip::NameMapping(mapping) => {
+          is_custom_type = mapping.db_type.is_custom();
+          Some(mapping)
+        }
+
         NameMappingOrSkip::Skip => None,
       }
     } else if default_name_mapping() {
@@ -461,7 +467,9 @@ impl<'a> Parse for Attributes<'a> {
       None
     };
 
-    let id_mapping = if let Some(mapping) = id_mapping {
+    let id_mapping = if is_custom_type {
+      None
+    } else if let Some(mapping) = id_mapping {
       match mapping {
         IdMappingOrSkip::IdMapping(mapping) => Some(mapping),
         IdMappingOrSkip::Skip => None,
