@@ -129,8 +129,8 @@ impl Parse for IdMappingOrSkip {
         } else {
           return Ok(Self::Skip);
         }
-      } else if ident == "type" {
-        check_duplicate!(ident, rust_type, "type");
+      } else if ident == "sql_type" {
+        check_duplicate!(ident, rust_type, "sql_type");
 
         let value = arg.require_name_value()?.clone().value;
 
@@ -161,7 +161,7 @@ impl Parse for IdMappingOrSkip {
       } else {
         return Err(spanned_error!(
           ident,
-          format!("Unknown attribute `{ident}`. Expected one of: `skip`, `default`, `type`")
+          format!("Unknown attribute `{ident}`. Expected one of: `skip`, `default`, `sql_type`")
         ));
       }
     }

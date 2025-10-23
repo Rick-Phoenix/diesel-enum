@@ -1,3 +1,3 @@
 [print_schema]
 file = "src/pg_schema.rs"
-custom_type_derives = ["Debug"]
+custom_type_derives = ["Debug", "diesel::query_builder::QueryId"]

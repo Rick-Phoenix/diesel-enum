@@ -24,7 +24,8 @@ async fn select() {
 
   let fire_pokemons_by_name: Vec<String> = run_sqlite_query(|conn| {
     pokemon_types::table
-      .inner_join(types::table)
+      // This also shows that joins work correctly
+      .inner_join(types::table.on(pokemon_types::type_id.eq(types::id)))
       .inner_join(pokemons::table)
       .filter(types::name.eq(Types::Fire))
       .select(pokemons::name)
