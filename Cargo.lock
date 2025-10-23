@@ -165,8 +165,13 @@ dependencies = [
 name = "diesel-enums-core"
 version = "0.1.0"
 dependencies = [
+ "deadpool-diesel",
+ "deadpool-sync",
+ "diesel",
+ "dotenvy",
  "owo-colors",
  "thiserror",
+ "tokio",
 ]
 
 [[package]]

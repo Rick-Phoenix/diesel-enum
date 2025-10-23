@@ -9,7 +9,7 @@ use syn::{
 use crate::{
   features::{
     default_conn_function_path, default_name_mapping, default_skip_consistency_check,
-    default_skip_test, no_default_id_mapping,
+    default_skip_test, default_sqlite_runner, no_default_id_mapping,
   },
   Check, TokenStream2,
 };
@@ -460,6 +460,8 @@ impl<'a> Parse for Attributes<'a> {
       input
     } else if default_skip_consistency_check() {
       Check::Skip
+    } else if default_sqlite_runner() {
+      Check::Conn(quote! { diesel_enums::test_runners::sqlite_runner })
     } else if default_conn_function_path() {
       Check::Conn(quote! { crate::db_enum_test_func::get_connection })
     } else {

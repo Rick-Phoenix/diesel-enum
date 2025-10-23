@@ -17,3 +17,7 @@ default-name-mapping = ["diesel-enum-checked/default-name-mapping"]
 default-conn-function-path = ["diesel-enum-checked/default-conn-function-path"]
 no-default-id-mapping = ["diesel-enum-checked/no-default-id-mapping"]
 async-tests = ["diesel-enum-checked/async-tests"]
+default-sqlite-runner = [
+  "diesel-enum-checked/default-sqlite-runner",
+  "diesel-enums-core/default-sqlite-runner",
+]

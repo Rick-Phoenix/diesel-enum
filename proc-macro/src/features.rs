@@ -21,3 +21,7 @@ pub fn async_tests() -> bool {
 pub fn default_conn_function_path() -> bool {
   cfg!(feature = "default-conn-function-path")
 }
+
+pub fn default_sqlite_runner() -> bool {
+  cfg!(feature = "default-sqlite-runner")
+}
