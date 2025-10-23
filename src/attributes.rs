@@ -316,7 +316,7 @@ pub fn extract_path(expr: Expr) -> Result<Path, Error> {
 impl<'a> Parse for Attributes<'a> {
   fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
     let mut table_name: Option<String> = None;
-    let mut table_path: Option<TokenStream2> = None;
+    let mut table_path: Option<Path> = None;
     let mut column: Option<String> = None;
     let mut conn: Option<Check> = None;
     let mut case: Option<Case> = None;
@@ -392,7 +392,7 @@ impl<'a> Parse for Attributes<'a> {
           if ident == "table" {
             check_duplicate!(ident, table_path, "table");
 
-            table_path = Some(extract_path(value)?.to_token_stream());
+            table_path = Some(extract_path(value)?);
           } else if ident == "case" {
             check_duplicate!(ident, case);
 
@@ -479,6 +479,14 @@ impl<'a> Parse for Attributes<'a> {
     } else {
       None
     };
+
+    if table_name.is_none() && let Some(path) = &table_path {
+      let name = &path.segments.last().ok_or(spanned_error!(path.clone(), "Invalid table path"))?.ident;
+
+      table_name = Some(name.to_string());
+    }
+
+    let table_path = table_path.map(|path| path.to_token_stream());
 
     Ok(Attributes {
       table_name,
