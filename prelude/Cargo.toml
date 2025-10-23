@@ -21,3 +21,7 @@ default-sqlite-runner = [
   "diesel-enum-checked/default-sqlite-runner",
   "diesel-enums-core/default-sqlite-runner",
 ]
+default-postgres-runner = [
+  "diesel-enum-checked/default-postgres-runner",
+  "diesel-enums-core/default-postgres-runner",
+]

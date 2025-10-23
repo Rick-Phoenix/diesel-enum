@@ -25,3 +25,7 @@ pub fn default_conn_function_path() -> bool {
 pub fn default_sqlite_runner() -> bool {
   cfg!(feature = "default-sqlite-runner")
 }
+
+pub fn default_postgres_runner() -> bool {
+  cfg!(feature = "default-postgres-runner")
+}

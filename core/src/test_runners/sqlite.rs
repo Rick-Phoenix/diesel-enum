@@ -24,7 +24,7 @@ pub async fn sqlite_runner(
     .expect("Failed to get a connection to the SQLite database")
     .interact(callback)
     .await
-    .expect("Sqlite testing pool thread crashed")
+    .expect("SQLite testing pool thread crashed")
 }
 
 #[track_caller]

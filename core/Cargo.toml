@@ -12,13 +12,14 @@ tokio = { version = "1", features = [
   "sync",
 ], optional = true }
 deadpool-diesel = { version = "0.6", optional = true }
-deadpool-sync = { version = "0.1.4", optional = true }
+deadpool-sync = { version = "0.1", optional = true }
 dotenvy = { version = "0.15", optional = true }
 diesel = { version = "2.3", optional = true }
 
 [features]
 pretty-test-errors = ["dep:owo-colors"]
 default-sqlite-runner = [
+  "test-utils",
   "dep:tokio",
   "dep:deadpool-diesel",
   "deadpool-diesel/sqlite",
@@ -26,4 +27,14 @@ default-sqlite-runner = [
   "dep:dotenvy",
   "dep:diesel",
   "diesel/sqlite",
+]
+test-utils = []
+default-postgres-runner = [
+  "test-utils",
+  "dep:tokio",
+  "dep:deadpool-diesel",
+  "deadpool-diesel/postgres",
+  "dep:dotenvy",
+  "dep:diesel",
+  "diesel/postgres",
 ]
