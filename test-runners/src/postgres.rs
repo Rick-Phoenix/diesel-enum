@@ -5,10 +5,9 @@ use deadpool_diesel::{
   Runtime,
 };
 use diesel::prelude::*;
+use diesel_enums::DbEnumError;
 use dotenvy::dotenv;
 use tokio::sync::OnceCell;
-
-use crate::DbEnumError;
 
 static POSTGRES_POOL: OnceCell<deadpool_diesel::postgres::Pool> = OnceCell::const_new();
 

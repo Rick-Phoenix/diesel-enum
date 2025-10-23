@@ -7,7 +7,6 @@ use deadpool_diesel::{
 };
 use deadpool_sync::SyncWrapper;
 use diesel::{prelude::*, SqliteConnection};
-use diesel_enums::DbEnumError;
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use dotenvy::dotenv;
 use pgtemp::PgTempDB;
@@ -15,8 +14,6 @@ use tokio::sync::OnceCell;
 
 const PG_MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/pg");
 
-#[cfg(test)]
-pub mod from_table;
 pub mod models;
 pub mod pg_schema;
 #[cfg(test)]
@@ -24,14 +21,18 @@ pub mod pg_tests;
 #[cfg(test)]
 pub mod queries;
 pub mod schema;
+#[cfg(test)]
+pub mod sqlite_tests;
 
 static SQLITE_POOL: OnceCell<deadpool_diesel::sqlite::Pool> = OnceCell::const_new();
 static POSTGRES_POOL: OnceCell<deadpool_diesel::postgres::Pool> = OnceCell::const_new();
 
 #[cfg(test)]
 pub async fn postgres_testing_callback(
-  callback: impl FnOnce(&mut PgConnection) -> Result<(), DbEnumError> + std::marker::Send + 'static,
-) -> Result<(), DbEnumError> {
+  callback: impl FnOnce(&mut PgConnection) -> Result<(), diesel_enums::DbEnumError>
+    + std::marker::Send
+    + 'static,
+) -> Result<(), diesel_enums::DbEnumError> {
   POSTGRES_POOL
     .get_or_init(|| async { create_pg_pool().await })
     .await
@@ -73,9 +74,12 @@ pub async fn run_sqlite_query<T: Send + 'static>(
   )
 }
 
+#[cfg(test)]
 pub async fn sqlite_testing_callback(
-  callback: impl FnOnce(&mut SqliteConnection) -> Result<(), DbEnumError> + std::marker::Send + 'static,
-) -> Result<(), DbEnumError> {
+  callback: impl FnOnce(&mut SqliteConnection) -> Result<(), diesel_enums::DbEnumError>
+    + std::marker::Send
+    + 'static,
+) -> Result<(), diesel_enums::DbEnumError> {
   SQLITE_POOL
     .get_or_init(|| async { create_sqlite_pool() })
     .await

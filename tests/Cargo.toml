@@ -3,13 +3,18 @@ name = "tests"
 publish = false
 edition = "2024"
 
+[dev-dependencies]
+
+
 [dependencies]
+test-runners = { path = "../test-runners/", features = ["sqlite"] }
 diesel_migrations = "2.3.0"
 pgtemp = "0.6.0"
 diesel-enums = { path = "../prelude", features = [
   "async-tests",
   "pretty-test-errors",
   "default-skip-test",
+  "default-sqlite-runner",
 ] }
 deadpool-diesel = { version = "0.6", features = ["sqlite", "postgres"] }
 deadpool-sync = "0.1.4"

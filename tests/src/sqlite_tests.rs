@@ -160,10 +160,10 @@ mod id_mismatch {
 
     assert_eq!(errors.len(), 1);
 
-    let e = errors.get(0).unwrap();
+    let e = errors.first().unwrap();
 
     if let ErrorKind::IdMismatches(items) = e {
-      let (name, expected, found) = items.get(0).unwrap();
+      let (name, expected, found) = items.first().unwrap();
 
       assert_eq!(name, "Grass");
       assert_eq!(*expected, 1);
@@ -237,7 +237,7 @@ mod skipped_ids {
 
     assert_eq!(errors.len(), 1);
 
-    let e = errors.get(0).unwrap();
+    let e = errors.first().unwrap();
 
     if let ErrorKind::IdMismatches(items) = e {
       assert_eq!(items.len(), 18);
@@ -280,5 +280,36 @@ mod custom_table_name {
   #[tokio::test]
   async fn custom_table_name() {
     PokeTypes::check_consistency().await.unwrap();
+  }
+}
+
+mod using_default_runner {
+  use super::*;
+
+  #[diesel_enum(case = "PascalCase", name_mapping(default), id_mapping(skip))]
+  enum Types {
+    Grass,
+    Poison,
+    Fire,
+    Flying,
+    Water,
+    Bug,
+    Normal,
+    Electric,
+    Ground,
+    Fairy,
+    Fighting,
+    Psychic,
+    Rock,
+    Steel,
+    Ice,
+    Ghost,
+    Dragon,
+    Dark,
+  }
+
+  #[tokio::test]
+  async fn using_default_runner() {
+    Types::check_consistency().await.unwrap();
   }
 }

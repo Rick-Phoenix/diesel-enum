@@ -74,7 +74,7 @@ pub fn diesel_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
     let table_name_ident = format_ident!("{table_name}");
     quote! { crate::schema::#table_name_ident }
   });
-  let column_name = column.as_deref().unwrap_or_else(|| "name");
+  let column_name = column.as_deref().unwrap_or("name");
 
   let mut enum_impls = TokenStream2::new();
 
@@ -101,9 +101,9 @@ pub fn diesel_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
     let is_custom_type = db_type.is_custom();
 
     let sql_conversions = if is_custom_type {
-      postgres_enum_conversions(&enum_name, &sql_type_path, &variants_data)
+      postgres_enum_conversions(enum_name, sql_type_path, &variants_data)
     } else {
-      sql_string_conversions(&enum_name, &sql_type_path, &variants_data)
+      sql_string_conversions(enum_name, sql_type_path, &variants_data)
     };
 
     enum_impls.extend(sql_conversions);
@@ -111,18 +111,18 @@ pub fn diesel_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
     if let Check::Conn(connection_func) = &conn {
       let test_impl = if id_mapping.is_none() {
         test_without_id(
-          &enum_name,
+          enum_name,
           &enum_name_str,
           &table_path,
           &table_name,
-          &column_name,
-          &db_type,
-          &connection_func,
+          column_name,
+          db_type,
+          connection_func,
           &variants_data,
           skip_test,
         )
       } else {
-        check_consistency_inter_call(&enum_name)
+        check_consistency_inter_call(enum_name)
       };
 
       enum_impls.extend(test_impl);
@@ -163,9 +163,9 @@ pub fn diesel_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
         &target_enum_str,
         &table_path,
         &table_name,
-        &column_name,
+        column_name,
         &rust_type,
-        &connection_func,
+        connection_func,
         &variants_data,
         skip_test,
       );
@@ -180,7 +180,7 @@ pub fn diesel_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
         #orig_input
       });
     } else {
-      let enum_to_enum_conversion_tokens = enum_to_enum_conversion(&enum_name, &variants_data);
+      let enum_to_enum_conversion_tokens = enum_to_enum_conversion(enum_name, &variants_data);
 
       let mut enum_copy = ast.clone();
 

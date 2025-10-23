@@ -54,7 +54,7 @@ pub fn sql_int_conversions(
   sql_type_path: &TokenStream2,
   variants_data: &[VariantData],
 ) -> TokenStream2 {
-  let to_sql_conversion = traverse_enum(&variants_data, |data| {
+  let to_sql_conversion = traverse_enum(variants_data, |data| {
     let variant = &data.ident;
     let id = LitInt::new(&format!("{}{}", data.id, rust_type), Span::call_site());
 

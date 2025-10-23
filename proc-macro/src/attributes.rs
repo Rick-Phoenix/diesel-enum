@@ -65,13 +65,13 @@ impl Parse for SkippedRanges {
     for item in items {
       if let Expr::Range(range_expr) = &item {
         let start = if let Some(start_expr) = &range_expr.start {
-          extract_i32(&start_expr)?
+          extract_i32(start_expr)?
         } else {
           0
         };
 
         let end = if let Some(end_expr) = &range_expr.end {
-          extract_i32(&end_expr)?
+          extract_i32(end_expr)?
         } else {
           return Err(spanned_error!(
             range_expr,
@@ -462,9 +462,9 @@ impl<'a> Parse for Attributes<'a> {
     } else if default_skip_consistency_check() {
       Check::Skip
     } else if default_sqlite_runner() {
-      Check::Conn(quote! { diesel_enums::test_runners::sqlite_runner })
+      Check::Conn(quote! { test_runners::sqlite_runner })
     } else if default_postgres_runner() {
-      Check::Conn(quote! { diesel_enums::test_runners::postgres_runner })
+      Check::Conn(quote! { test_runners::postgres_runner })
     } else if default_runner_path() {
       Check::Conn(quote! { crate::db_enum_test::test_runner })
     } else {
@@ -512,8 +512,7 @@ impl<'a> Parse for Attributes<'a> {
 
     let table_path = table_path.map(|path| path.to_token_stream());
 
-    let skip_test =
-      force_run_test.unwrap_or_else(|| skip_test.unwrap_or_else(|| default_skip_test()));
+    let skip_test = force_run_test.unwrap_or_else(|| skip_test.unwrap_or_else(default_skip_test));
 
     Ok(Attributes {
       table_name,

@@ -1,3 +1,5 @@
+#![allow(clippy::too_many_arguments)]
+
 use convert_case::{Case, Casing};
 use quote::{format_ident, quote};
 use syn::Ident;

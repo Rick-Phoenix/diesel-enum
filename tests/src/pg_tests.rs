@@ -85,7 +85,7 @@ mod missing_db_variant {
 
     assert_eq!(errors.len(), 1);
 
-    let e = errors.get(0).unwrap();
+    let e = errors.first().unwrap();
 
     if let ErrorKind::MissingFromRustEnum(items) = e {
       assert!(items.len() == 1);
@@ -128,7 +128,7 @@ mod extra_variant {
 
     assert_eq!(errors.len(), 1);
 
-    let e = errors.get(0).unwrap();
+    let e = errors.first().unwrap();
 
     if let ErrorKind::MissingFromDb(items) = e {
       assert!(items.len() == 1);
@@ -145,13 +145,13 @@ async fn pg_queries() {
 
   use crate::pg_schema::*;
 
-  let new_row = PgTable {
-    name: "Charizard".to_string(),
-    type_: PgTypes::Fire,
-  };
-
   run_pg_query(|conn| {
-    Ok(conn.test_transaction(move |conn| -> Result<(), String> {
+    let _: () = conn.test_transaction(|conn| -> Result<(), String> {
+      let new_row = PgTable {
+        name: "Charizard".to_string(),
+        type_: PgTypes::Fire,
+      };
+
       let inserted_row: PgTable = diesel::insert_into(pokemon_table::table)
         .values(&new_row)
         .get_result(conn)
@@ -183,7 +183,8 @@ async fn pg_queries() {
       assert_eq!(new_row, deleted_row);
 
       Ok(())
-    }))
+    });
+    Ok(())
   })
   .await
   .unwrap();

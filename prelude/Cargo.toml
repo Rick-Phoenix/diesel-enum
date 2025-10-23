@@ -17,11 +17,5 @@ default-name-mapping = ["diesel-enum-checked/default-name-mapping"]
 default-runner-path = ["diesel-enum-checked/default-runner-path"]
 no-default-id-mapping = ["diesel-enum-checked/no-default-id-mapping"]
 async-tests = ["diesel-enum-checked/async-tests"]
-default-sqlite-runner = [
-  "diesel-enum-checked/default-sqlite-runner",
-  "diesel-enums-core/default-sqlite-runner",
-]
-default-postgres-runner = [
-  "diesel-enum-checked/default-postgres-runner",
-  "diesel-enums-core/default-postgres-runner",
-]
+default-sqlite-runner = ["diesel-enum-checked/default-sqlite-runner"]
+default-postgres-runner = ["diesel-enum-checked/default-postgres-runner"]
