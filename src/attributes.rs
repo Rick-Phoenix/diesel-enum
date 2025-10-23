@@ -323,12 +323,13 @@ impl<'a> Parse for Attributes<'a> {
     let mut name_mapping: Option<NameMappingOrSkip> = None;
     let mut id_mapping: Option<IdMappingOrSkip> = None;
     let mut skip_test: Option<bool> = None;
+    let mut force_run_test: Option<bool> = None;
     let mut skip_ids: Option<Vec<Range<i32>>> = None;
 
     let punctuated_args = Punctuated::<Meta, Token![,]>::parse_terminated(input)?;
 
     let attributes_error_msg =
-      "Expected one of: `table_name`, `table`, `column`, `conn`, `skip_consistency_check`, `skip_ids`, `skip_test`, `case`, `id_mapping`, `name_mapping`";
+      "Expected one of: `table_name`, `table`, `column`, `conn`, `skip_consistency_check`, `skip_ids`, `run_test`, `skip_test`, `case`, `id_mapping`, `name_mapping`";
 
     for arg in punctuated_args {
       match arg {
@@ -363,7 +364,18 @@ impl<'a> Parse for Attributes<'a> {
         Meta::Path(path) => {
           let ident = path.require_ident()?;
 
-          if ident == "skip_consistency_check" {
+          if ident == "run_test" {
+            check_duplicate!(ident, force_run_test, "run_test");
+
+            if skip_test.is_some() {
+              return Err(spanned_error!(
+                ident,
+                "Cannot use `run_test` and `skip_test` together"
+              ));
+            }
+
+            force_run_test = Some(true);
+          } else if ident == "skip_consistency_check" {
             check_duplicate!(ident, conn, "skip_consistency_check");
 
             if matches!(conn, Some(Check::Conn(_))) {
@@ -376,6 +388,13 @@ impl<'a> Parse for Attributes<'a> {
             conn = Some(Check::Skip);
           } else if ident == "skip_test" {
             check_duplicate!(ident, skip_test);
+
+            if force_run_test.is_some() {
+              return Err(spanned_error!(
+                ident,
+                "Cannot use `run_test` and `skip_test` together"
+              ));
+            }
 
             skip_test = Some(true);
           } else {
@@ -488,6 +507,9 @@ impl<'a> Parse for Attributes<'a> {
 
     let table_path = table_path.map(|path| path.to_token_stream());
 
+    let skip_test =
+      force_run_test.unwrap_or_else(|| skip_test.unwrap_or_else(|| default_skip_test()));
+
     Ok(Attributes {
       table_name,
       table_path,
@@ -496,7 +518,7 @@ impl<'a> Parse for Attributes<'a> {
       case: case.unwrap_or(Case::Snake),
       id_mapping,
       name_mapping,
-      skip_test: skip_test.unwrap_or_else(|| default_skip_test()),
+      skip_test,
       skip_ranges: skip_ids.unwrap_or_default(),
     })
   }
