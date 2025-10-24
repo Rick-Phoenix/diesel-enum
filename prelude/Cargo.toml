@@ -16,6 +16,8 @@ diesel = { version = "2.3", features = [
 tokio = { version = "1", features = ["full"] }
 
 [dependencies]
+document-features = "0.2"
+
 diesel-enum-checked = { path = "../proc-macro/" }
 owo-colors = { version = "4", optional = true, features = ["supports-colors"] }
 thiserror = "2"
@@ -34,10 +36,12 @@ diesel = { version = "2.3", optional = true }
 
 default = ["pretty-test-errors"]
 
+## Enables prettified, colored output from errors
 pretty-test-errors = ["dep:owo-colors"]
 
 test-utils = []
 
+## Exports the test runner for sqlite
 sqlite = [
   "test-utils",
   "dep:tokio",
@@ -48,6 +52,7 @@ sqlite = [
   "diesel/sqlite",
 ]
 
+## Exports the test runner for postgres
 postgres = [
   "test-utils",
   "dep:tokio",

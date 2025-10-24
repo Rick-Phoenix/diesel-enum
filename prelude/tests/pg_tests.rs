@@ -1,7 +1,7 @@
 mod pg_data;
 
 use diesel_enums::{diesel_enum, ErrorKind};
-use pg_data::{models::*, postgres_testing_callback, run_pg_query, schema::*};
+use pg_data::{models::*, postgres_testing_callback, schema::*};
 
 #[tokio::test]
 async fn you_shall_pass() {
@@ -135,58 +135,4 @@ mod extra_variant {
       panic!();
     };
   }
-}
-
-#[tokio::test]
-async fn pg_queries() {
-  use diesel::prelude::*;
-
-  pub fn select_fire_pokemons(conn: &mut PgConnection) -> Vec<Pokemon> {
-    pokemons::table
-      .select(Pokemon::as_select())
-      .filter(pokemons::type_.eq(PokemonTypes::Fire))
-      .get_results(conn)
-      .unwrap()
-  }
-
-  run_pg_query(|conn| {
-    let _: () = conn.test_transaction(|conn| -> Result<(), String> {
-      let new_row = Pokemon {
-        name: "Charizard".to_string(),
-        type_: PokemonTypes::Fire,
-      };
-
-      let inserted_row: Pokemon = diesel::insert_into(pokemons::table)
-        .values(&new_row)
-        .get_result(conn)
-        .unwrap();
-
-      assert_eq!(new_row, inserted_row);
-
-      let rows = select_fire_pokemons(conn);
-      let selected_row = rows.first().unwrap();
-
-      assert_eq!(&new_row, selected_row);
-
-      let updated_row: Pokemon =
-        diesel::update(pokemons::table.filter(pokemons::type_.eq(PokemonTypes::Fire)))
-          .set(pokemons::type_.eq(PokemonTypes::Fire))
-          .get_result(conn)
-          .unwrap();
-
-      assert_eq!(updated_row.type_, PokemonTypes::Fire);
-
-      let deleted_row =
-        diesel::delete(pokemons::table.filter(pokemons::type_.eq(PokemonTypes::Fire)))
-          .get_result(conn)
-          .unwrap();
-
-      assert_eq!(new_row, deleted_row);
-
-      Ok(())
-    });
-    Ok(())
-  })
-  .await
-  .unwrap();
 }

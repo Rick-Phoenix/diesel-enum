@@ -1,3 +1,46 @@
+#![cfg_attr(docsrs, feature(doc_cfg))]
+#![doc = include_str!("../README.md")]
+//! # Examples
+//!
+//! ## Lookup Table
+//!
+//! In this example taken directly from one of the tests we use a regular lookup table and map it to our rust enum.
+//!
+//! Schema:
+//! ```rust,ignore
+#![doc = include_str!("../tests/sqlite_data/schema.rs")]
+//! ```
+//! Models:
+//! ```rust,ignore
+#![doc = include_str!("../tests/sqlite_data/models.rs")]
+//! ```
+//! Usage:
+//! ```rust,ignore
+#![doc = include_str!("../tests/sqlite_example.rs")]
+//! ```
+//!
+//! ## Custom Postgres Type
+//!
+//! In this example we use a custom postgres type as our mapping.
+//! Schema:
+//!
+//! ```rust,ignore
+#![doc = include_str!("../tests/pg_data/schema.rs")]
+//! ```
+//!
+//! Models:
+//! ```rust,ignore
+#![doc = include_str!("../tests/pg_data/models.rs")]
+//! ```
+//!
+//! Usage:
+//! ```rust,ignore
+#![doc = include_str!("../tests/pg_example.rs")]
+//! ```
+//!
+//! # Features
+#![doc = document_features::document_features!()]
+
 pub use diesel_enum_checked::*;
 
 #[cfg(feature = "test-utils")]
