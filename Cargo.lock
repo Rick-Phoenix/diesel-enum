@@ -158,13 +158,6 @@ name = "diesel-enums"
 version = "0.1.0"
 dependencies = [
  "diesel-enum-checked",
- "diesel-enums-core",
-]
-
-[[package]]
-name = "diesel-enums-core"
-version = "0.1.0"
-dependencies = [
  "owo-colors",
  "thiserror",
 ]

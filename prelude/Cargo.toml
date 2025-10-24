@@ -4,10 +4,11 @@ version = "0.1.0"
 edition.workspace = true
 
 [dependencies]
-diesel-enums-core = { path = "../core" }
 diesel-enum-checked = { path = "../proc-macro/" }
+owo-colors = { version = "4", optional = true, features = ["supports-colors"] }
+thiserror = "2"
 
 [features]
-default = ["pretty-test-errors"]
+pretty-test-errors = ["dep:owo-colors"]
 
-pretty-test-errors = ["diesel-enums-core/pretty-test-errors"]
+default = ["pretty-test-errors"]
