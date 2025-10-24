@@ -1,10 +1,11 @@
 [package]
-name = "diesel-enum-checked"
-publish = false
-version = "0.1.0"
-license = "Apache-2.0"
-edition = "2024"
-readme = true
+name = "diesel-enums-proc-macro"
+version = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+repository = { workspace = true }
+
+description = "proc-macro library behind the diesel-enums crate."
 
 [package.metadata.docs.rs]
 all-features = true

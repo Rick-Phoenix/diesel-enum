@@ -41,7 +41,7 @@
 //! # Features
 #![doc = document_features::document_features!()]
 
-pub use diesel_enum_checked::*;
+pub use diesel_enums_proc_macro::*;
 
 #[cfg(feature = "test-utils")]
 mod test_runners;

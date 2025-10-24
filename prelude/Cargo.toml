@@ -1,7 +1,17 @@
 [package]
 name = "diesel-enums"
-version = "0.1.0"
+version = { workspace = true }
+
+description = "Seamless mapping between rust enums and custom postgres types or regular lookup tables, with automatically generated consistency checks."
+
 edition.workspace = true
+license = { workspace = true }
+repository = { workspace = true }
+
+readme = true
+
+[package.metadata.release]
+tag = true
 
 [dev-dependencies]
 diesel_migrations = "2.3.0"
@@ -18,7 +28,7 @@ tokio = { version = "1", features = ["full"] }
 [dependencies]
 document-features = "0.2"
 
-diesel-enum-checked = { path = "../proc-macro/" }
+diesel-enums-proc-macro = { path = "../proc-macro/", version = "0.1.0" }
 owo-colors = { version = "4", optional = true, features = ["supports-colors"] }
 thiserror = "2"
 

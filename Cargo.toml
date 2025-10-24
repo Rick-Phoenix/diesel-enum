@@ -4,3 +4,12 @@ resolver = "3"
 
 [workspace.package]
 edition = "2024"
+version = "0.1.0"
+license = "Apache-2.0"
+repository = "https://github.com/Rick-Phoenix/diesel-enum"
+
+[workspace.metadata.release]
+tag = false
+allow-branch = ["main"]
+enable-all-features = true
+shared-version = true

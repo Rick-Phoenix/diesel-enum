@@ -144,23 +144,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "diesel-enum-checked"
-version = "0.1.0"
-dependencies = [
- "convert_case",
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
 name = "diesel-enums"
 version = "0.1.0"
 dependencies = [
  "deadpool-diesel",
  "deadpool-sync",
  "diesel",
- "diesel-enum-checked",
+ "diesel-enums-proc-macro",
  "diesel_migrations",
  "document-features",
  "dotenvy",
@@ -168,6 +158,16 @@ dependencies = [
  "pgtemp",
  "thiserror",
  "tokio",
+]
+
+[[package]]
+name = "diesel-enums-proc-macro"
+version = "0.1.0"
+dependencies = [
+ "convert_case",
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
