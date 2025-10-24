@@ -9,6 +9,7 @@ pub struct Pokemon {
   pub name: String,
 }
 
+// Lookup table used for many-to-many relationship between pokemons and types
 #[derive(Queryable, Associations, Insertable)]
 #[diesel(belongs_to(Pokemon))]
 #[diesel(belongs_to(Type))]
@@ -16,9 +17,10 @@ pub struct Pokemon {
 #[diesel(table_name = pokemon_types)]
 pub struct PokemonType {
   pub pokemon_id: i32,
-  pub type_id: TypesId,
+  pub type_id: TypesId, // Automatically generated from `Types` since it is a double mapping
 }
 
+// We use the enum to reference known, existing types
 #[diesel_enum(conn = diesel_enums::sqlite_runner, table = types, name_mapping(default), case = "PascalCase", id_mapping(default))]
 pub enum Types {
   Grass,
@@ -41,6 +43,7 @@ pub enum Types {
   Dark,
 }
 
+// We keep the generic lookup table structure to insert new types in the future
 #[derive(Queryable, Selectable, Debug, Insertable, Identifiable)]
 #[diesel(table_name = types)]
 pub struct Type {

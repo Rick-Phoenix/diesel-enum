@@ -15,6 +15,8 @@ use tokio::sync::OnceCell;
 const PG_MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/pg");
 
 #[cfg(test)]
+pub mod examples;
+#[cfg(test)]
 pub mod pg_tests;
 #[cfg(test)]
 pub mod sqlite_tests;
