@@ -69,23 +69,6 @@ pub async fn run_sqlite_query<T: Send + 'static>(
   )
 }
 
-#[cfg(test)]
-pub async fn sqlite_testing_callback(
-  callback: impl FnOnce(&mut SqliteConnection) -> Result<(), diesel_enums::DbEnumError>
-    + std::marker::Send
-    + 'static,
-) -> Result<(), diesel_enums::DbEnumError> {
-  SQLITE_POOL
-    .get_or_init(|| async { create_sqlite_pool() })
-    .await
-    .get()
-    .await
-    .expect("Could not get a connection")
-    .interact(callback)
-    .await
-    .expect("Sqlite pool thread crashed")
-}
-
 // Needs to be put here to avoid being dropped earlier
 static PG_TEMP: OnceCell<PgTempDB> = OnceCell::const_new();
 
