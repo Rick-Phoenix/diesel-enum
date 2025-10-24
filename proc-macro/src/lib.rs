@@ -42,7 +42,9 @@ where
   tokens
 }
 
-/// Maps a rust enum to either a custom postgres enum or to a table with fixed values in a database.
+/// Maps a rust enum to a database source, which can be a custom postgres type or a common lookup table.
+///
+/// By default, it also generates a method that connects to the database and checks if the mapping is fully in sync, as well as a test that calls such method and panics in case a mismatch is found.
 #[proc_macro_attribute]
 pub fn diesel_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
   let orig_input: TokenStream2 = input.clone().into();

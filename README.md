@@ -1,10 +1,8 @@
-# Diesel-enums
-
-This crate allows for seamless mapping of rust enums to database enums or lookup tables using [`diesel`], and automatically generates methods and tests that connect to the database to ensure that the rust enum is fully in sync with the database source.
-
 # How It Works
 
-This crate can generate mappings to two kinds of sources:
+This crate allows for seamless mapping of rust enums to database enums or lookup tables using [`diesel`](::diesel), and automatically generates methods and tests that connect to the database to ensure that the rust enum is fully in sync with the database source.
+
+The mappings can be done with two kinds of sources:
 
 - For **custom types** created in **Postgres**, it maps the rust enum to the custom type.
 
@@ -132,9 +130,9 @@ It will also generate [`From`] implementations so that `PokemonType` can be **se
 
 ## Generated Consistency Checks
 
-The macro will also generate a method called `check_consistency`, that will connect to the database and check if the mapped enum is consistent with the rust enum, as well as a test that will call that method and panic if it returns an error.
+The macro will also generate a method called `check_consistency`, that will connect to the database and check if the mapped enum is consistent with the rust enum. If it is not, it will return a [`DbEnumError`], which will contain the source of the error such as missing variants or an `id` mismatc.
 
-Both behaviours can be disabled, which can be useful for temporary scenarios or for running manual consistency checks.
+By default, it will also generate a test that will call that method and panic if it returns an error.
 
 # Macro Attributes
 
@@ -212,6 +210,7 @@ Variant attributes can be set with `#[db_mapping(name = "...", id = ...)]`
 - The [`diesel_enum`] macro automatically implements the following derives on the target enum:
     - [`PartialEq`], [`Eq`], [`Clone`], [`Copy`], [`Hash`], [`Debug`]
     - [`FromSqlRow`](diesel::deserialize::FromSqlRow), [`AsExpression`](diesel::expression::AsExpression), [`ToSql`](diesel::serialize::ToSql), [`FromSql`](diesel::deserialize::FromSql)
+    
     And also passes the target type to the `#[diesel(sql_type = ...)]` attribute.
     
     So an error may occur if trying to set these a second time.
