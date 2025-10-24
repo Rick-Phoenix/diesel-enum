@@ -6,9 +6,10 @@ use deadpool_diesel::{
 };
 use deadpool_sync::SyncWrapper;
 use diesel::{prelude::*, SqliteConnection};
-use diesel_enums::DbEnumError;
 use dotenvy::dotenv;
 use tokio::sync::OnceCell;
+
+use crate::DbEnumError;
 
 static SQLITE_POOL: OnceCell<deadpool_diesel::sqlite::Pool> = OnceCell::const_new();
 

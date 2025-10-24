@@ -157,9 +157,14 @@ dependencies = [
 name = "diesel-enums"
 version = "0.1.0"
 dependencies = [
+ "deadpool-diesel",
+ "deadpool-sync",
+ "diesel",
  "diesel-enum-checked",
+ "dotenvy",
  "owo-colors",
  "thiserror",
+ "tokio",
 ]
 
 [[package]]
@@ -835,18 +840,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "test-runners"
-version = "0.1.0"
-dependencies = [
- "deadpool-diesel",
- "deadpool-sync",
- "diesel",
- "diesel-enums",
- "dotenvy",
- "tokio",
-]
-
-[[package]]
 name = "tests"
 version = "0.0.0"
 dependencies = [
@@ -857,7 +850,6 @@ dependencies = [
  "diesel_migrations",
  "dotenvy",
  "pgtemp",
- "test-runners",
  "tokio",
 ]
 

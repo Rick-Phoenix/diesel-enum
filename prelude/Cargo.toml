@@ -8,7 +8,39 @@ diesel-enum-checked = { path = "../proc-macro/" }
 owo-colors = { version = "4", optional = true, features = ["supports-colors"] }
 thiserror = "2"
 
+tokio = { version = "1", features = [
+  "time",
+  "macros",
+  "sync",
+], optional = true }
+deadpool-diesel = { version = "0.6", optional = true }
+deadpool-sync = { version = "0.1", optional = true }
+dotenvy = { version = "0.15", optional = true }
+diesel = { version = "2.3", optional = true }
+
 [features]
-pretty-test-errors = ["dep:owo-colors"]
 
 default = ["pretty-test-errors"]
+
+pretty-test-errors = ["dep:owo-colors"]
+
+test-utils = []
+
+sqlite = [
+  "test-utils",
+  "dep:tokio",
+  "dep:dotenvy",
+  "dep:diesel",
+  "deadpool-diesel/sqlite",
+  "dep:deadpool-sync",
+  "diesel/sqlite",
+]
+
+postgres = [
+  "test-utils",
+  "dep:tokio",
+  "dep:dotenvy",
+  "dep:diesel",
+  "deadpool-diesel/postgres",
+  "diesel/postgres",
+]
