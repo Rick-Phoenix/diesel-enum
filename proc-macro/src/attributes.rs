@@ -68,6 +68,10 @@ impl Parse for SkippedRanges {
         };
 
         ranges.push(start..final_end);
+      } else if let Expr::Lit(lit) = &item && let Lit::Int(lit_int) = &lit.lit {
+        let num = lit_int.base10_parse::<i32>()?;
+
+        ranges.push(num..num + 1);
       } else {
         return Err(spanned_error!(
           item,
@@ -280,7 +284,7 @@ impl<'a> Parse for Attributes<'a> {
     let punctuated_args = Punctuated::<Meta, Token![,]>::parse_terminated(input)?;
 
     let attributes_error_msg =
-      "Expected one of: `table_name`, `table`, `column`, `conn`, `skip_consistency_check`, `skip_ids`, `skip_test`, `case`, `id_mapping`, `name_mapping`";
+      "Expected one of: `table_name`, `table`, `column`, `conn`, `skip_check`, `skip_ids`, `skip_test`, `case`, `id_mapping`, `name_mapping`";
 
     for arg in punctuated_args {
       match arg {
@@ -315,14 +319,11 @@ impl<'a> Parse for Attributes<'a> {
         Meta::Path(path) => {
           let ident = path.require_ident()?;
 
-          if ident == "skip_consistency_check" {
-            check_duplicate!(ident, conn, "skip_consistency_check");
+          if ident == "skip_check" {
+            check_duplicate!(ident, conn, "skip_check");
 
             if matches!(conn, Some(Check::Conn(_))) {
-              return Err(spanned_error!(
-                ident,
-                "Cannot use `conn` with `skip_consistency_check`"
-              ));
+              return Err(spanned_error!(ident, "Cannot use `conn` with `skip_check`"));
             }
 
             conn = Some(Check::Skip);
@@ -372,10 +373,7 @@ impl<'a> Parse for Attributes<'a> {
             check_duplicate!(ident, conn);
 
             if matches!(conn, Some(Check::Skip)) {
-              return Err(spanned_error!(
-                ident,
-                "Cannot use `conn` with `skip_consistency_check`"
-              ));
+              return Err(spanned_error!(ident, "Cannot use `conn` with `skip_check`"));
             }
 
             conn = Some(Check::Conn(extract_path(value)?.to_token_stream()));
@@ -394,7 +392,7 @@ impl<'a> Parse for Attributes<'a> {
     } else {
       return Err(error!(
         input.span(),
-        "At least one between `conn` and `skip_consistency_check` must be present"
+        "At least one between `conn` and `skip_check` must be present"
       ));
     };
 
