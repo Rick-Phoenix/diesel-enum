@@ -7,37 +7,6 @@ use crate::{pg_schema, schema::*};
 pub struct Pokemon {
   pub id: i32,
   pub name: String,
-  pub next_evolution_id: Option<i32>,
-  pub prev_evolution_id: Option<i32>,
-  pub description: String,
-  pub image_data_id: i32,
-  pub base_stats_id: i32,
-}
-
-#[derive(Queryable, Identifiable, Associations, Insertable, Selectable, Debug)]
-#[diesel(belongs_to(Pokemon))]
-pub struct BaseStat {
-  #[diesel(skip_insertion)]
-  pub id: i32,
-  pub hp: i32,
-  pub attack: i32,
-  pub defense: i32,
-  pub special_attack: i32,
-  pub special_defense: i32,
-  pub speed: i32,
-  pub pokemon_id: i32,
-}
-
-#[derive(Queryable, Identifiable, Associations, Insertable, Selectable, Debug)]
-#[diesel(table_name = image_data)]
-#[diesel(belongs_to(Pokemon))]
-pub struct ImageData {
-  #[diesel(skip_insertion)]
-  pub id: i32,
-  pub sprite: String,
-  pub thumbnail: String,
-  pub hires: String,
-  pub pokemon_id: i32,
 }
 
 #[derive(Queryable, Associations, Insertable)]
