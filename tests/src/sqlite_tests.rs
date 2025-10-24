@@ -40,7 +40,7 @@ mod altered_casing {
 mod wrong_casing {
   use super::*;
 
-  #[diesel_enum(conn = crate::sqlite_testing_callback, skip_test, name_mapping(default), id_mapping(skip))]
+  #[diesel_enum(conn = crate::sqlite_testing_callback, skip_test, name_mapping(default))]
   enum Types {
     Grass,
     Poison,
@@ -83,7 +83,7 @@ mod wrong_casing {
 mod name_mismatch {
   use super::*;
 
-  #[diesel_enum(conn = crate::sqlite_testing_callback, skip_test, case = "PascalCase", name_mapping(default), id_mapping(skip))]
+  #[diesel_enum(conn = crate::sqlite_testing_callback, skip_test, case = "PascalCase", name_mapping(default))]
   enum Types {
     #[db_mapping(name = "abc")]
     Grass,
@@ -177,7 +177,7 @@ mod id_mismatch {
 mod ignored_id_mismatch {
   use super::*;
 
-  #[diesel_enum(conn = crate::sqlite_testing_callback, case = "PascalCase", name_mapping(default), id_mapping(skip))]
+  #[diesel_enum(conn = crate::sqlite_testing_callback, case = "PascalCase", name_mapping(default))]
   enum Types {
     // Wrong order here
     Poison,

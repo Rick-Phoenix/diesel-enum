@@ -34,17 +34,6 @@ impl Default for IdMapping {
   }
 }
 
-enum IdMappingOrSkip {
-  IdMapping(IdMapping),
-  Skip,
-}
-
-impl Default for IdMappingOrSkip {
-  fn default() -> Self {
-    Self::IdMapping(IdMapping::default())
-  }
-}
-
 struct SkippedRanges {
   pub ranges: Vec<Range<i32>>,
 }
@@ -93,7 +82,7 @@ impl Parse for SkippedRanges {
   }
 }
 
-impl Parse for IdMappingOrSkip {
+impl Parse for IdMapping {
   fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
     let mut rust_type: Option<Ident> = None;
     let mut int_type_path: Option<TokenStream2> = None;
@@ -113,15 +102,6 @@ impl Parse for IdMappingOrSkip {
           ));
         } else {
           return Ok(Self::default());
-        }
-      } else if ident == "skip" {
-        if args_len != 1 {
-          return Err(error!(
-            input.span(),
-            "Cannot use other `id_mapping` attributes when using `skip`"
-          ));
-        } else {
-          return Ok(Self::Skip);
         }
       } else if ident == "sql_type" {
         check_duplicate!(ident, rust_type, "sql_type");
@@ -155,15 +135,15 @@ impl Parse for IdMappingOrSkip {
       } else {
         return Err(spanned_error!(
           ident,
-          format!("Unknown attribute `{ident}`. Expected one of: `skip`, `default`, `sql_type`")
+          format!("Unknown attribute `{ident}`. Expected one of: `default`, `sql_type`")
         ));
       }
     }
 
-    Ok(Self::IdMapping(IdMapping {
+    Ok(IdMapping {
       type_path: int_type_path.unwrap_or_else(|| quote! { diesel::sql_types::Integer }),
       rust_type: rust_type.unwrap_or_else(|| format_ident!("i32")),
-    }))
+    })
   }
 }
 
@@ -192,18 +172,7 @@ impl Default for NameMapping {
   }
 }
 
-enum NameMappingOrSkip {
-  NameMapping(NameMapping),
-  Skip,
-}
-
-impl Default for NameMappingOrSkip {
-  fn default() -> Self {
-    Self::NameMapping(NameMapping::default())
-  }
-}
-
-impl Parse for NameMappingOrSkip {
+impl Parse for NameMapping {
   fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
     let mut custom_type_path: Option<Path> = None;
     let mut custom_enum_name: Option<String> = None;
@@ -224,15 +193,6 @@ impl Parse for NameMappingOrSkip {
         } else {
           return Ok(Self::default());
         }
-      } else if ident == "skip" {
-        if args_len != 1 {
-          return Err(error!(
-            input.span(),
-            "Cannot use other `name_mapping` attributes when using `skip`"
-          ));
-        } else {
-          return Ok(Self::Skip);
-        }
       } else if ident == "path" {
         check_duplicate!(ident, custom_type_path, "path");
 
@@ -248,9 +208,7 @@ impl Parse for NameMappingOrSkip {
       } else {
         return Err(spanned_error!(
           ident,
-          format!(
-            "Unknown attribute `{ident}`. Expected one of: `skip`, `default`, `path`, `name`"
-          )
+          format!("Unknown attribute `{ident}`. Expected one of: `default`, `path`, `name`")
         ));
       }
     }
@@ -273,13 +231,13 @@ impl Parse for NameMappingOrSkip {
       NameTypes::Text
     };
 
-    Ok(Self::NameMapping(NameMapping {
+    Ok(NameMapping {
       db_type,
       path: custom_type_path.map_or_else(
         || quote! { diesel::sql_types::Text },
         |t| t.to_token_stream(),
       ),
-    }))
+    })
   }
 }
 
@@ -314,8 +272,8 @@ impl<'a> Parse for Attributes<'a> {
     let mut column: Option<String> = None;
     let mut conn: Option<Check> = None;
     let mut case: Option<Case> = None;
-    let mut name_mapping: Option<NameMappingOrSkip> = None;
-    let mut id_mapping: Option<IdMappingOrSkip> = None;
+    let mut name_mapping: Option<NameMapping> = None;
+    let mut id_mapping: Option<IdMapping> = None;
     let mut skip_test: Option<bool> = None;
     let mut skip_ids: Option<Vec<Range<i32>>> = None;
 
@@ -338,13 +296,13 @@ impl<'a> Parse for Attributes<'a> {
           } else if ident == "name_mapping" {
             check_duplicate!(ident, name_mapping);
 
-            let parse_result = syn::parse2::<NameMappingOrSkip>(list.tokens)?;
+            let parse_result = syn::parse2::<NameMapping>(list.tokens)?;
 
             name_mapping = Some(parse_result);
           } else if ident == "id_mapping" {
             check_duplicate!(ident, id_mapping);
 
-            let parse_result = syn::parse2::<IdMappingOrSkip>(list.tokens)?;
+            let parse_result = syn::parse2::<IdMapping>(list.tokens)?;
 
             id_mapping = Some(parse_result);
           } else {
@@ -440,31 +398,9 @@ impl<'a> Parse for Attributes<'a> {
       ));
     };
 
-    let mut is_custom_type = false;
+    let is_custom_type = name_mapping.as_ref().is_some_and(|m| m.db_type.is_custom());
 
-    let name_mapping = if let Some(mapping) = name_mapping {
-      match mapping {
-        NameMappingOrSkip::NameMapping(mapping) => {
-          is_custom_type = mapping.db_type.is_custom();
-          Some(mapping)
-        }
-
-        NameMappingOrSkip::Skip => None,
-      }
-    } else {
-      None
-    };
-
-    let id_mapping = if is_custom_type {
-      None
-    } else if let Some(mapping) = id_mapping {
-      match mapping {
-        IdMappingOrSkip::IdMapping(mapping) => Some(mapping),
-        IdMappingOrSkip::Skip => None,
-      }
-    } else {
-      None
-    };
+    let id_mapping = if is_custom_type { None } else { id_mapping };
 
     if table_name.is_none() && let Some(path) = &table_path {
       let name = &path.segments.last().ok_or(spanned_error!(path.clone(), "Invalid table path"))?.ident;
