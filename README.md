@@ -1,10 +1,10 @@
 # Diesel-enums
 
-This crate allows for seamless mapping of rust enums to database enums or enum-like structures using `diesel`. It automatically generates tests that check if the mapping between the rust program and the database is fully correct.
+This crate allows for seamless mapping of rust enums to database enums or lookup tables using [`diesel`], and automatically generates methods and tests that connect to the database to ensure that the rust enum is fully in sync with the database source.
 
 # How It Works
 
-This crate can generate two kinds of mappings:
+This crate can generate mappings to two kinds of sources:
 
 - For **custom types** created in **Postgres**, it maps the rust enum to the custom type.
 
@@ -14,9 +14,9 @@ This crate can generate two kinds of mappings:
     ```
     and then the enum variants will simply be serialized/deserialized as the corresponding member of the postgres enum.
     
-- For other databases such as **SQLite** and **MySQL**, a regular lookup table can be used. 
+- For other databases such as **SQLite** and **MySQL**, a regular lookup table is used. 
 
-    For these, you can choose two kinds of mappings: **id mappings** and **name mappings**, which can be used together or in isolation.
+    For these, you can choose between two kinds of mappings: **id mappings** and **name mappings**, which can be used together or in isolation.
 
 Let's look at an example to better illustrate the process.
 
@@ -47,9 +47,9 @@ pub struct Pokemon {
 }
 ```
 
-When using an **id mapping**, the macro will generate into/try_from implementations with the target integer value (i.e. `i32` for `Integer` and so on), as well as `FromSql` `ToSql` implementations that will use the id belonging to each variant.
+When using an **id mapping**, the macro will generate [`Into`]/[`TryFrom`] implementations with the target integer value (i.e. `i32` for `Integer` and so on), as well as `FromSql` and `ToSql` implementations that will use the id belonging to each variant when deserializing/serializing the enum's value.
 
-This means that we can effectively replace the `type_id` field with the enum, so that it will behave exactly like an id but with more clarity and ease of use
+This means that we can effectively replace the `type_id` field with the enum, so that it will behave exactly like an id but with a bit more clarity and ease of use
 
 ```rust,ignore
 pub struct Pokemon {
@@ -60,7 +60,7 @@ pub struct Pokemon {
 
 ### Managing ID Mapping
 
-The into/try_from implementations with the integer values will be based on the order of the variants, assuming an auto-incrementing integer is used in the database.
+The [`Into`]/[`TryFrom`] implementations with the integer values will be based on the order of the variants, assuming an auto-incrementing integer is used in the database.
 
 While this can be overridden for single variants, things can become unwieldy if a variant in the middle is deleted, as all the following ids will now need to be set manually.
 
@@ -80,7 +80,7 @@ pub enum PokemonType {
 }
 ```
 
-For such situations, we can use the `skip_ids` parameter to list some ranges or numbers that should be skipped from the into/try_from integer conversion.
+For such situations, we can use the `skip_ids` parameter to list some ranges or numbers that should be skipped from the [`Into`]/[`TryFrom`] integer conversion.
 
 ```rust,ignore
 // using skip_ids(1..=2) or skip_ids(1, 2)
@@ -118,7 +118,7 @@ In such a case, the mapped database type will simply be `Text` (or the specific 
 
 ## Using Both Mappings
 
-It is also possible to use both mappings. In such a case, the macro will treat the normal enum as one with a text-based mapping, and it will also create a copy of the same enum with an `Id` suffix. So in this example, it would automatically generate
+It is also possible to use both mappings. In such a case, the macro will treat the normal enum as one with a text-based mapping, and it will also create a copy of the same enum with an `Id` suffix, that will be mapped to the table's `id` column. So in this example, it would automatically generate the following struct:
 
 ```rust,ignore
 pub enum PokemonTypeId {
@@ -128,27 +128,22 @@ pub enum PokemonTypeId {
 }
 ```
 
-Which can be used as the enum with the id-based mapping. 
-
-It will also generate into/from methods so that `PokemonType` can be **seamlessly converted** into `PokemonTypeId` and vice versa.
+It will also generate [`From`] implementations so that `PokemonType` can be **seamlessly converted** into `PokemonTypeId` and vice versa.
 
 ## Generated Consistency Checks
 
 The macro will also generate a method called `check_consistency`, that will connect to the database and check if the mapped enum is consistent with the rust enum, as well as a test that will call that method and panic if it returns an error.
 
-It will also automatically generate a test that calls such method and panics if mismatches are found.
-
 Both behaviours can be disabled, which can be useful for temporary scenarios or for running manual consistency checks.
 
 # Macro Attributes
-
 
 These are the allowed parameters for the `#[diesel_enum(...)]` macro.
 
 - `id_mapping`
     - `id_mapping(default)` uses a default mapping with `Integer` and `i32`.
     - `id_mapping(sql_type = diesel::sql_type::...)` can be used to customize the mapped type (only integer-based types are supported)
-        - This type will directly be passed inside `#[diesel(sql_type = ...)]`, so this must not be set manually.
+        - This type will directly be passed to `#[diesel(sql_type = ...)]`.
     - Ignored if `name_mapping` is used with a custom type.
 
 - `skip_ids(1..=15, 20, 22, 30..35)`
@@ -158,7 +153,7 @@ These are the allowed parameters for the `#[diesel_enum(...)]` macro.
     - `name_mapping(default)` uses the default mapping as a regular column as `Text`
     - `name_mapping(path = crate::schemas::MyCustomType)` specifies the path to a custom generated type from postgres
         - Required for custom postgres types
-        - This type will directly be passed inside `#[diesel(sql_type = ...)]`, so this must not be set manually.
+        - This type will directly be passed to `#[diesel(sql_type = ...)]`.
     - `name_mapping(name = "my_custom_type")` specifies the name of the custom type inside postgres. 
         - If unset, the last segment from `path` in snake_case will be used instead
 
@@ -171,7 +166,7 @@ These are the allowed parameters for the `#[diesel_enum(...)]` macro.
     - If unset, it defaults to `crate::schema::$NAME`, where `$NAME` is the value from `table_name`
 
 - `column`
-    - The column to use for enums that map to regular columns. Ignored for custom types.
+    - The column to use for enums that map to regular columns.
     - Defaults to `name` (so for a `PokemonTypes` enum, the default target will be the column `pokemon_types.name`)
 
 - `case`
@@ -187,26 +182,26 @@ These are the allowed parameters for the `#[diesel_enum(...)]` macro.
           callback: impl FnOnce(&mut SqliteConnection) -> Result<(), DbEnumError> + std::marker::Send + 'static
         ) -> Result<(), DbEnumError>
         ```
-    - There are some default runners exported within this crate with the `sqlite` or `postgres` feature, that set up a connection pool with `deadpool-diesel` and run the tests with it.
+    - There are some default runners exported within this crate: [`sqlite_runner`] (with the `sqlite` feature) or [`postgres_runner`] (with the `postgres` feature), that set up a connection pool with `deadpool-diesel` and run the tests with it.
 
 - `skip_check`
-    - It does not generate the `check_consistency` method that can be used for checking the validity of the database mapping.
+    - The macro will not generate the `check_consistency` method that can be used for checking the validity of the database mapping.
     - Can be useful in case the rust enum is to be used as a simple way of enforcing a set of predetermined values, rather than a full mapping to a database structure.
 
 - `skip_test`
-    - By default, the macro will generate a test that runs the consistency check and panics if the two enums are out of sync. This parameter disables that behaviour.
+    - By default, the macro will generate a test that runs the consistency check and panics if the mapping is out of sync. This parameter disables that behaviour.
     - Automatically true is `skip_check` is true.
 
 ## Variant Attributes
 
-Variant attributes can be set with `#[db_mapping(name = "...", id = 101)]`
+Variant attributes can be set with `#[db_mapping(name = "...", id = ...)]`
 
 - `name`
-    - Sets the name of the variant in the database source.
+    - Manually sets the corresponding name of the variant in the database source.
     - Overrides the top-level `case` parameter.
 
 - `id`
-    - Sets the id of the variant in the database source.
+    - Manually sets the corresponding id of the variant in the database source.
     - Ignored for postgres custom types.
 
 # Warnings And Considerations
@@ -217,7 +212,10 @@ Variant attributes can be set with `#[db_mapping(name = "...", id = 101)]`
 - The [`diesel_enum`] macro automatically implements the following derives on the target enum:
     - [`PartialEq`], [`Eq`], [`Clone`], [`Copy`], [`Hash`], [`Debug`]
     - [`FromSqlRow`](diesel::deserialize::FromSqlRow), [`AsExpression`](diesel::expression::AsExpression), [`ToSql`](diesel::serialize::ToSql), [`FromSql`](diesel::deserialize::FromSql)
+    And also passes the target type to the `#[diesel(sql_type = ...)]` attribute.
+    
+    So an error may occur if trying to set these a second time.
 
-- When generating a double implementation with `name` and `id`, the `Id` enum will be a full copy of the original one, including all the given macro attributes. If this is an issue, then the enum may only have a name mapping, and the custom id mapping can be implemented manually.
+- When using a double mapping the `Id` enum will be a **full copy** of the original one, including all the given macro attributes. If this is an issue, then the enum may only have a name mapping, and the custom id mapping can be implemented manually.
 
 - When using a double mapping, `check_consistency` will only be generated for the enum with the original name, but it will check the mappings for both the variant names and ids.
