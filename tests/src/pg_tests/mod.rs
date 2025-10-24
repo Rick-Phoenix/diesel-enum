@@ -6,7 +6,7 @@ pub mod schema;
 use models::*;
 use schema::*;
 
-use crate::run_pg_query;
+use crate::{examples::postgres_example::select_fire_pokemons, run_pg_query};
 
 #[tokio::test]
 async fn you_shall_pass() {
@@ -160,13 +160,10 @@ async fn pg_queries() {
 
       assert_eq!(new_row, inserted_row);
 
-      let selected_row: Pokemon = pokemons::table
-        .select(Pokemon::as_select())
-        .filter(pokemons::type_.eq(PokemonTypes::Fire))
-        .get_result(conn)
-        .unwrap();
+      let rows = select_fire_pokemons(conn);
+      let selected_row = rows.first().unwrap();
 
-      assert_eq!(new_row, selected_row);
+      assert_eq!(&new_row, selected_row);
 
       let updated_row: Pokemon =
         diesel::update(pokemons::table.filter(pokemons::type_.eq(PokemonTypes::Fire)))
