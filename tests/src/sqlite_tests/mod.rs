@@ -1,14 +1,18 @@
+pub mod models;
+pub mod schema;
+
 use diesel_enums::{diesel_enum, ErrorKind};
+use schema::*;
 
 #[tokio::test]
 async fn you_shall_pass() {
-  crate::models::Types::check_consistency().await.unwrap();
+  models::Types::check_consistency().await.unwrap();
 }
 
 mod altered_casing {
   use super::*;
 
-  #[diesel_enum(conn = crate::sqlite_testing_callback, case = "PascalCase", name_mapping(default), id_mapping(default))]
+  #[diesel_enum(conn = crate::sqlite_testing_callback, table = types, case = "PascalCase", name_mapping(default), id_mapping(default))]
   #[allow(non_camel_case_types)]
   enum Types {
     grass,
@@ -40,7 +44,7 @@ mod altered_casing {
 mod wrong_casing {
   use super::*;
 
-  #[diesel_enum(conn = crate::sqlite_testing_callback, skip_test, name_mapping(default))]
+  #[diesel_enum(conn = crate::sqlite_testing_callback, table = types, skip_test, name_mapping(default))]
   enum Types {
     Grass,
     Poison,
@@ -83,7 +87,7 @@ mod wrong_casing {
 mod name_mismatch {
   use super::*;
 
-  #[diesel_enum(conn = crate::sqlite_testing_callback, skip_test, case = "PascalCase", name_mapping(default))]
+  #[diesel_enum(conn = crate::sqlite_testing_callback, table = types, skip_test, case = "PascalCase", name_mapping(default))]
   enum Types {
     #[db_mapping(name = "abc")]
     Grass,
@@ -131,7 +135,7 @@ mod name_mismatch {
 mod id_mismatch {
   use super::*;
 
-  #[diesel_enum(conn = crate::sqlite_testing_callback, skip_test, case = "PascalCase", name_mapping(default), id_mapping(default))]
+  #[diesel_enum(conn = crate::sqlite_testing_callback, table = types, skip_test, case = "PascalCase", name_mapping(default), id_mapping(default))]
   enum Types {
     #[db_mapping(id = 20)]
     Grass,
@@ -177,7 +181,7 @@ mod id_mismatch {
 mod ignored_id_mismatch {
   use super::*;
 
-  #[diesel_enum(conn = crate::sqlite_testing_callback, case = "PascalCase", name_mapping(default))]
+  #[diesel_enum(conn = crate::sqlite_testing_callback, table = types, case = "PascalCase", name_mapping(default))]
   enum Types {
     // Wrong order here
     Poison,
@@ -209,7 +213,7 @@ mod ignored_id_mismatch {
 mod skipped_ids {
   use super::*;
 
-  #[diesel_enum(conn = crate::sqlite_testing_callback, skip_test, skip_ids(1..6, 6, 7..=10), case = "PascalCase", name_mapping(default), id_mapping(default))]
+  #[diesel_enum(conn = crate::sqlite_testing_callback, skip_test, skip_ids(1..6, 6, 7..=10), table = types, case = "PascalCase", name_mapping(default), id_mapping(default))]
   enum Types {
     Grass,
     Poison,
@@ -255,7 +259,7 @@ mod skipped_ids {
 mod custom_table_name {
   use super::*;
 
-  #[diesel_enum(conn = crate::sqlite_testing_callback, case = "PascalCase", table_name = "types", name_mapping(default), id_mapping(default))]
+  #[diesel_enum(conn = crate::sqlite_testing_callback, table = types, case = "PascalCase", table_name = "types", name_mapping(default), id_mapping(default))]
   enum PokeTypes {
     Grass,
     Poison,
@@ -286,11 +290,8 @@ mod custom_table_name {
 mod sqlite_queries {
   use diesel::prelude::*;
 
-  use crate::{
-    models::{Types, TypesId},
-    run_sqlite_query,
-    schema::{pokemon_types, pokemons, types},
-  };
+  use super::{models::*, *};
+  use crate::run_sqlite_query;
 
   #[tokio::test]
   async fn select() {

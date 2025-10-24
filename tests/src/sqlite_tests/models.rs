@@ -1,7 +1,7 @@
 use diesel::prelude::*;
 use diesel_enums::diesel_enum;
 
-use crate::{pg_schema, schema::*};
+use super::schema::*;
 
 #[derive(Queryable, Selectable, Debug, Identifiable, Insertable)]
 pub struct Pokemon {
@@ -19,7 +19,7 @@ pub struct PokemonType {
   pub type_id: TypesId,
 }
 
-#[diesel_enum(conn = crate::sqlite_testing_callback, name_mapping(default), case = "PascalCase", id_mapping(default))]
+#[diesel_enum(conn = crate::sqlite_testing_callback, table = types, name_mapping(default), case = "PascalCase", id_mapping(default))]
 pub enum Types {
   Grass,
   Poison,
@@ -47,33 +47,4 @@ pub struct Type {
   #[diesel(skip_insertion)]
   pub id: i32,
   pub name: String,
-}
-
-#[derive(Queryable, Selectable, Debug, Insertable, PartialEq, Clone)]
-#[diesel(table_name = pg_schema::pokemon_table)]
-pub struct PgTable {
-  pub name: String,
-  pub type_: PgTypes,
-}
-
-#[diesel_enum(conn = crate::postgres_testing_callback, name_mapping(name = "pokemon_type", path = pg_schema::sql_types::PokemonType))]
-pub enum PgTypes {
-  Grass,
-  Poison,
-  Fire,
-  Flying,
-  Water,
-  Bug,
-  Normal,
-  Electric,
-  Ground,
-  Fairy,
-  Fighting,
-  Psychic,
-  Rock,
-  Steel,
-  Ice,
-  Ghost,
-  Dragon,
-  Dark,
 }

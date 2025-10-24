@@ -1,21 +1,24 @@
 use diesel_enums::{diesel_enum, ErrorKind};
 
-use crate::{
-  models::{PgTable, PgTypes},
-  run_pg_query,
-};
+pub mod models;
+pub mod schema;
+
+use models::*;
+use schema::*;
+
+use crate::run_pg_query;
 
 #[tokio::test]
 async fn you_shall_pass() {
-  PgTypes::check_consistency().await.unwrap();
+  PokemonTypes::check_consistency().await.unwrap();
 }
 
 mod wrong_casing {
 
   use super::*;
 
-  #[diesel_enum(conn = crate::postgres_testing_callback, skip_test, case = "UPPERCASE", name_mapping(name = "pokemon_type", path = crate::pg_schema::sql_types::PokemonType))]
-  enum PgTypes {
+  #[diesel_enum(conn = crate::postgres_testing_callback, skip_test, case = "UPPERCASE", name_mapping(name = "pokemon_type", path = sql_types::PokemonType))]
+  enum PokemonTypes {
     Grass,
     Poison,
     Fire,
@@ -38,7 +41,7 @@ mod wrong_casing {
 
   #[tokio::test]
   async fn wrong_casing() {
-    let errors = PgTypes::check_consistency().await.unwrap_err().errors;
+    let errors = PokemonTypes::check_consistency().await.unwrap_err().errors;
 
     assert_eq!(errors.len(), 2);
 
@@ -57,8 +60,8 @@ mod wrong_casing {
 mod missing_db_variant {
   use super::*;
 
-  #[diesel_enum(conn = crate::postgres_testing_callback, skip_test,  name_mapping(name = "pokemon_type", path = crate::pg_schema::sql_types::PokemonType))]
-  enum PgTypes {
+  #[diesel_enum(conn = crate::postgres_testing_callback, skip_test,  name_mapping(name = "pokemon_type", path = sql_types::PokemonType))]
+  enum PokemonTypes {
     // Grass,
     Poison,
     Fire,
@@ -81,7 +84,7 @@ mod missing_db_variant {
 
   #[tokio::test]
   async fn missing_db_variant() {
-    let errors = PgTypes::check_consistency().await.unwrap_err().errors;
+    let errors = PokemonTypes::check_consistency().await.unwrap_err().errors;
 
     assert_eq!(errors.len(), 1);
 
@@ -99,8 +102,8 @@ mod missing_db_variant {
 mod extra_variant {
   use super::*;
 
-  #[diesel_enum(conn = crate::postgres_testing_callback, skip_test, name_mapping(name = "pokemon_type", path = crate::pg_schema::sql_types::PokemonType))]
-  enum PgTypes {
+  #[diesel_enum(conn = crate::postgres_testing_callback, skip_test, name_mapping(name = "pokemon_type", path = sql_types::PokemonType))]
+  enum PokemonTypes {
     NotAPokemonType,
     Grass,
     Poison,
@@ -124,7 +127,7 @@ mod extra_variant {
 
   #[tokio::test]
   async fn extra_variant() {
-    let errors = PgTypes::check_consistency().await.unwrap_err().errors;
+    let errors = PokemonTypes::check_consistency().await.unwrap_err().errors;
 
     assert_eq!(errors.len(), 1);
 
@@ -143,40 +146,38 @@ mod extra_variant {
 async fn pg_queries() {
   use diesel::prelude::*;
 
-  use crate::pg_schema::*;
-
   run_pg_query(|conn| {
     let _: () = conn.test_transaction(|conn| -> Result<(), String> {
-      let new_row = PgTable {
+      let new_row = Pokemon {
         name: "Charizard".to_string(),
-        type_: PgTypes::Fire,
+        type_: PokemonTypes::Fire,
       };
 
-      let inserted_row: PgTable = diesel::insert_into(pokemon_table::table)
+      let inserted_row: Pokemon = diesel::insert_into(pokemon_table::table)
         .values(&new_row)
         .get_result(conn)
         .unwrap();
 
       assert_eq!(new_row, inserted_row);
 
-      let selected_row: PgTable = pokemon_table::table
-        .select(PgTable::as_select())
-        .filter(pokemon_table::type_.eq(PgTypes::Fire))
+      let selected_row: Pokemon = pokemon_table::table
+        .select(Pokemon::as_select())
+        .filter(pokemon_table::type_.eq(PokemonTypes::Fire))
         .get_result(conn)
         .unwrap();
 
       assert_eq!(new_row, selected_row);
 
-      let updated_row: PgTable =
-        diesel::update(pokemon_table::table.filter(pokemon_table::type_.eq(PgTypes::Fire)))
-          .set(pokemon_table::type_.eq(PgTypes::Fire))
+      let updated_row: Pokemon =
+        diesel::update(pokemon_table::table.filter(pokemon_table::type_.eq(PokemonTypes::Fire)))
+          .set(pokemon_table::type_.eq(PokemonTypes::Fire))
           .get_result(conn)
           .unwrap();
 
-      assert_eq!(updated_row.type_, PgTypes::Fire);
+      assert_eq!(updated_row.type_, PokemonTypes::Fire);
 
       let deleted_row =
-        diesel::delete(pokemon_table::table.filter(pokemon_table::type_.eq(PgTypes::Fire)))
+        diesel::delete(pokemon_table::table.filter(pokemon_table::type_.eq(PokemonTypes::Fire)))
           .get_result(conn)
           .unwrap();
 
