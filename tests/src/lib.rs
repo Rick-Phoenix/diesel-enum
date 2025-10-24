@@ -18,8 +18,6 @@ pub mod models;
 pub mod pg_schema;
 #[cfg(test)]
 pub mod pg_tests;
-#[cfg(test)]
-pub mod queries;
 pub mod schema;
 #[cfg(test)]
 pub mod sqlite_tests;
