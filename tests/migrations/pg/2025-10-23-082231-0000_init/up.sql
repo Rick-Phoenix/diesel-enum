@@ -21,7 +21,7 @@ create type pokemon_type as enum (
 'dark'
 ) ;
 
-create table pokemon_table (
+create table pokemons (
 name text primary key,
 type pokemon_type not null
 ) ;

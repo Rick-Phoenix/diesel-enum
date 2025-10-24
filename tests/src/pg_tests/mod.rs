@@ -153,31 +153,31 @@ async fn pg_queries() {
         type_: PokemonTypes::Fire,
       };
 
-      let inserted_row: Pokemon = diesel::insert_into(pokemon_table::table)
+      let inserted_row: Pokemon = diesel::insert_into(pokemons::table)
         .values(&new_row)
         .get_result(conn)
         .unwrap();
 
       assert_eq!(new_row, inserted_row);
 
-      let selected_row: Pokemon = pokemon_table::table
+      let selected_row: Pokemon = pokemons::table
         .select(Pokemon::as_select())
-        .filter(pokemon_table::type_.eq(PokemonTypes::Fire))
+        .filter(pokemons::type_.eq(PokemonTypes::Fire))
         .get_result(conn)
         .unwrap();
 
       assert_eq!(new_row, selected_row);
 
       let updated_row: Pokemon =
-        diesel::update(pokemon_table::table.filter(pokemon_table::type_.eq(PokemonTypes::Fire)))
-          .set(pokemon_table::type_.eq(PokemonTypes::Fire))
+        diesel::update(pokemons::table.filter(pokemons::type_.eq(PokemonTypes::Fire)))
+          .set(pokemons::type_.eq(PokemonTypes::Fire))
           .get_result(conn)
           .unwrap();
 
       assert_eq!(updated_row.type_, PokemonTypes::Fire);
 
       let deleted_row =
-        diesel::delete(pokemon_table::table.filter(pokemon_table::type_.eq(PokemonTypes::Fire)))
+        diesel::delete(pokemons::table.filter(pokemons::type_.eq(PokemonTypes::Fire)))
           .get_result(conn)
           .unwrap();
 

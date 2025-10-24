@@ -12,7 +12,7 @@ diesel::table! {
     use diesel::sql_types::*;
     use super::sql_types::PokemonType;
 
-    pokemon_table (name) {
+    pokemons (name) {
         name -> Text,
         #[sql_name = "type"]
         type_ -> PokemonType,
