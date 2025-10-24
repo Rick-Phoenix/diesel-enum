@@ -2,7 +2,7 @@ use diesel_enums::{diesel_enum, ErrorKind};
 
 #[tokio::test]
 async fn you_shall_pass() {
-  crate::models::TypesId::check_consistency().await.unwrap();
+  crate::models::Types::check_consistency().await.unwrap();
 }
 
 mod altered_casing {

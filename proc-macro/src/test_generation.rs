@@ -16,6 +16,7 @@ pub fn test_with_id(
   conn_callback: &TokenStream2,
   variants_data: &[VariantData],
   skip_test: bool,
+  is_double_mapping: bool,
 ) -> TokenStream2 {
   let column_name_ident = format_ident!("{column_name}");
 
@@ -30,9 +31,17 @@ pub fn test_with_id(
       let db_name = &variant.db_name;
       let variant_ident = &variant.ident;
 
-      collection_tokens.extend(quote! {
-        #variants_map_ident.insert(#db_name, #enum_name::#variant_ident.into());
-      });
+      if is_double_mapping {
+        let enum_with_id_mapping = format_ident!("{enum_name}Id");
+
+        collection_tokens.extend(quote! {
+          #variants_map_ident.insert(#db_name, #enum_with_id_mapping::#variant_ident.into());
+        });
+      } else {
+        collection_tokens.extend(quote! {
+          #variants_map_ident.insert(#db_name, #enum_name::#variant_ident.into());
+        });
+      }
     }
 
     quote! {
@@ -248,20 +257,6 @@ pub fn test_without_id(
       }
 
       #auto_test
-    }
-  }
-}
-
-pub fn check_consistency_inter_call(enum_name: &Ident) -> TokenStream2 {
-  let id_enum = format_ident!("{enum_name}Id");
-
-  quote! {
-    #[cfg(test)]
-    impl #enum_name {
-      #[track_caller]
-      pub async fn check_consistency() -> Result<(), diesel_enums::DbEnumError> {
-        #id_enum::check_consistency().await
-      }
     }
   }
 }

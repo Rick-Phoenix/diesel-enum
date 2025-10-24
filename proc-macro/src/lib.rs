@@ -20,7 +20,7 @@ use crate::{
     sql_string_conversions,
   },
   process_variants::{process_variants, VariantData},
-  test_generation::{check_consistency_inter_call, test_with_id, test_without_id},
+  test_generation::{test_with_id, test_without_id},
 };
 
 enum Check {
@@ -87,6 +87,9 @@ pub fn diesel_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
     .into();
   }
 
+  let is_double_mapping =
+    name_mapping.is_some() && id_mapping.is_some() && matches!(conn, Check::Conn(_));
+
   if let Some(NameMapping {
     path: sql_type_path,
     db_type,
@@ -108,8 +111,8 @@ pub fn diesel_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
 
     enum_impls.extend(sql_conversions);
 
-    if let Check::Conn(connection_func) = &conn {
-      let test_impl = if id_mapping.is_none() {
+    if !is_double_mapping && let Check::Conn(connection_func) = &conn {
+      let test_impl =  {
         test_without_id(
           enum_name,
           &enum_name_str,
@@ -121,8 +124,6 @@ pub fn diesel_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
           &variants_data,
           skip_test,
         )
-      } else {
-        check_consistency_inter_call(enum_name)
       };
 
       enum_impls.extend(test_impl);
@@ -134,12 +135,12 @@ pub fn diesel_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
     rust_type,
   }) = id_mapping
   {
-    let has_double_mapping = name_mapping.is_some();
+    let original_enum_name = enum_name;
 
-    let target_enum_name = if has_double_mapping {
+    let target_enum_name = if is_double_mapping {
       format_ident!("{enum_name}Id")
     } else {
-      enum_name.clone()
+      original_enum_name.clone()
     };
 
     let target_enum_str = target_enum_name.to_string();
@@ -159,7 +160,7 @@ pub fn diesel_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
 
     if let Check::Conn(connection_func) = &conn {
       let test_impl = test_with_id(
-        &target_enum_name,
+        original_enum_name,
         &target_enum_str,
         &table_path,
         &table_name,
@@ -168,12 +169,13 @@ pub fn diesel_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
         connection_func,
         &variants_data,
         skip_test,
+        is_double_mapping,
       );
 
       enum_impls.extend(test_impl);
     }
 
-    if !has_double_mapping {
+    if !is_double_mapping {
       enum_impls.extend(quote! {
         #[derive(PartialEq, Eq, Clone, Copy, Hash, Debug, diesel_enums::MappedEnum, diesel::deserialize::FromSqlRow, diesel::expression::AsExpression)]
         #[diesel(sql_type = #sql_type_path)]
