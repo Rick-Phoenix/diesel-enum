@@ -1,6 +1,6 @@
 set tempdir := "/tmp"
 
-[working-directory('tests')]
+[working-directory('prelude')]
 test:
     #!/usr/bin/env sh
     PG_BIN_DIR=$(find /usr/lib/postgresql/ -type d -name "bin" | head -n 1)

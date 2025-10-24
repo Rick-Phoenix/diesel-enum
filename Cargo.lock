@@ -161,8 +161,10 @@ dependencies = [
  "deadpool-sync",
  "diesel",
  "diesel-enum-checked",
+ "diesel_migrations",
  "dotenvy",
  "owo-colors",
+ "pgtemp",
  "thiserror",
  "tokio",
 ]
@@ -837,20 +839,6 @@ dependencies = [
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "tests"
-version = "0.0.0"
-dependencies = [
- "deadpool-diesel",
- "deadpool-sync",
- "diesel",
- "diesel-enums",
- "diesel_migrations",
- "dotenvy",
- "pgtemp",
- "tokio",
 ]
 
 [[package]]

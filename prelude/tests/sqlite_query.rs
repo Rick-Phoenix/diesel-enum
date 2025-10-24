@@ -1,9 +1,7 @@
-use diesel::prelude::*;
+mod sqlite_data;
 
-use crate::{
-  run_sqlite_query,
-  sqlite_tests::{models::*, schema::*},
-};
+use diesel::prelude::*;
+use sqlite_data::{models::*, run_sqlite_query, schema::*};
 
 #[tokio::test]
 async fn queries() {

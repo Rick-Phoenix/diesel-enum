@@ -1,12 +1,7 @@
+mod pg_data;
+
 use diesel_enums::{diesel_enum, ErrorKind};
-
-pub mod models;
-pub mod schema;
-
-use models::*;
-use schema::*;
-
-use crate::{examples::postgres_example::select_fire_pokemons, run_pg_query};
+use pg_data::{models::*, postgres_testing_callback, run_pg_query, schema::*};
 
 #[tokio::test]
 async fn you_shall_pass() {
@@ -17,7 +12,7 @@ mod wrong_casing {
 
   use super::*;
 
-  #[diesel_enum(conn = crate::postgres_testing_callback, skip_test, case = "UPPERCASE", name_mapping(name = "pokemon_type", path = sql_types::PokemonType))]
+  #[diesel_enum(conn = postgres_testing_callback, skip_test, case = "UPPERCASE", name_mapping(name = "pokemon_type", path = sql_types::PokemonType))]
   enum PokemonTypes {
     Grass,
     Poison,
@@ -60,7 +55,7 @@ mod wrong_casing {
 mod missing_db_variant {
   use super::*;
 
-  #[diesel_enum(conn = crate::postgres_testing_callback, skip_test,  name_mapping(name = "pokemon_type", path = sql_types::PokemonType))]
+  #[diesel_enum(conn = postgres_testing_callback, skip_test,  name_mapping(name = "pokemon_type", path = sql_types::PokemonType))]
   enum PokemonTypes {
     // Grass,
     Poison,
@@ -102,7 +97,7 @@ mod missing_db_variant {
 mod extra_variant {
   use super::*;
 
-  #[diesel_enum(conn = crate::postgres_testing_callback, skip_test, name_mapping(name = "pokemon_type", path = sql_types::PokemonType))]
+  #[diesel_enum(conn = postgres_testing_callback, skip_test, name_mapping(name = "pokemon_type", path = sql_types::PokemonType))]
   enum PokemonTypes {
     NotAPokemonType,
     Grass,
@@ -145,6 +140,14 @@ mod extra_variant {
 #[tokio::test]
 async fn pg_queries() {
   use diesel::prelude::*;
+
+  pub fn select_fire_pokemons(conn: &mut PgConnection) -> Vec<Pokemon> {
+    pokemons::table
+      .select(Pokemon::as_select())
+      .filter(pokemons::type_.eq(PokemonTypes::Fire))
+      .get_results(conn)
+      .unwrap()
+  }
 
   run_pg_query(|conn| {
     let _: () = conn.test_transaction(|conn| -> Result<(), String> {

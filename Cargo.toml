@@ -1,5 +1,5 @@
 [workspace]
-members = ["prelude", "proc-macro", "tests"]
+members = ["prelude", "proc-macro"]
 resolver = "3"
 
 [workspace.package]

@@ -1,8 +1,7 @@
-pub mod models;
-pub mod schema;
+mod sqlite_data;
 
 use diesel_enums::{diesel_enum, ErrorKind};
-use schema::*;
+use sqlite_data::{schema::*, *};
 
 #[tokio::test]
 async fn you_shall_pass() {
