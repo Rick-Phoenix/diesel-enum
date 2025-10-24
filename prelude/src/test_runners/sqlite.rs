@@ -13,6 +13,9 @@ use crate::DbEnumError;
 
 static SQLITE_POOL: OnceCell<deadpool_diesel::sqlite::Pool> = OnceCell::const_new();
 
+/// A test runner for SQLite. It uses `deadpool-diesel` to create a connection pool, and sets the journal mode to WAL to allow for concurrent reads and faster tests.
+///
+/// It requires setting the env `DATABASE_URL` (via regular env or `.env` file) to set up the connection pool.
 pub async fn sqlite_runner(
   callback: impl FnOnce(&mut SqliteConnection) -> Result<(), DbEnumError> + std::marker::Send + 'static,
 ) -> Result<(), DbEnumError> {

@@ -1,4 +1,4 @@
-use std::env;
+use std::{env, time::Duration};
 
 use deadpool_diesel::{
   postgres::{Manager as PgManager, Pool as PgPool},
@@ -12,6 +12,9 @@ use crate::DbEnumError;
 
 static POSTGRES_POOL: OnceCell<deadpool_diesel::postgres::Pool> = OnceCell::const_new();
 
+/// A test runner for Postgres. It uses `deadpool-diesel` to create a connection pool that can be shared among tests, so that they can be executed faster.
+///
+/// It requires setting the env `DATABASE_URL` (via regular env or `.env` file) to set up the connection pool.
 pub async fn postgres_runner(
   callback: impl FnOnce(&mut PgConnection) -> Result<(), DbEnumError> + std::marker::Send + 'static,
 ) -> Result<(), DbEnumError> {
@@ -38,6 +41,9 @@ fn create_pg_pool() -> deadpool_diesel::postgres::Pool {
   PgPool::builder(manager)
     .max_size(1)
     .runtime(Runtime::Tokio1)
+    .wait_timeout(Some(Duration::from_secs(5)))
+    .create_timeout(Some(Duration::from_secs(5)))
+    .recycle_timeout(Some(Duration::from_secs(2)))
     .build()
     .expect("Failed to create the connection pool for Postgres")
 }

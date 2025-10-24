@@ -42,6 +42,7 @@ where
   tokens
 }
 
+/// Maps a rust enum to either a custom postgres enum or to a table with fixed values in a database.
 #[proc_macro_attribute]
 pub fn diesel_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
   let orig_input: TokenStream2 = input.clone().into();
@@ -198,6 +199,7 @@ pub fn diesel_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
   enum_impls.into()
 }
 
+#[doc(hidden)]
 #[proc_macro_derive(MappedEnum, attributes(db_mapping))]
 pub fn derive_macro(_input: TokenStream) -> TokenStream {
   TokenStream::new()

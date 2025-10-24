@@ -8,6 +8,7 @@ pub use test_runners::*;
 //
 use thiserror::Error;
 
+/// The kinds of errors that can occur when checking if a rust enum matches a database enum or table.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ErrorKind {
   MissingFromDb(Vec<String>),
@@ -15,6 +16,9 @@ pub enum ErrorKind {
   IdMismatches(Vec<(String, i64, i64)>),
 }
 
+/// An error that is produced when a rust enum does not match a database enum or table.
+///
+/// It includes the list of errors that may occur simultaneously, such as id mismatches as well as missing variants.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Error)]
 pub struct DbEnumError {
   pub rust_enum: String,
@@ -23,6 +27,7 @@ pub struct DbEnumError {
 }
 
 impl DbEnumError {
+  /// Creates a new error. Usually it's not necessary to use this directly.
   pub fn new(rust_enum: String, db_source: DbEnumSource) -> Self {
     Self {
       rust_enum,
@@ -32,6 +37,7 @@ impl DbEnumError {
   }
 }
 
+/// The database source for an enum mapping. It can be the name of a custom type (for postgres) or a regular column in other databases.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum DbEnumSource {
   CustomEnum(String),
@@ -39,6 +45,7 @@ pub enum DbEnumSource {
 }
 
 impl DbEnumSource {
+  /// The name of the target source (a custom postgres type or a regular column).
   pub fn name(&self) -> String {
     match self {
       Self::CustomEnum(name) => name.clone(),
@@ -46,6 +53,7 @@ impl DbEnumSource {
     }
   }
 
+  /// The type of the target source (a postgres enum or regular column)
   pub fn db_type(&self) -> &str {
     match self {
       Self::CustomEnum(_) => "enum",
