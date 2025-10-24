@@ -17,7 +17,7 @@ use crate::{
   attributes::{Attributes, IdMapping, NameMapping},
   conversions::{
     enum_int_conversions, enum_to_enum_conversion, postgres_enum_conversions, sql_int_conversions,
-    sql_string_conversions,
+    sql_string_conversions, to_from_str_conversions,
   },
   process_variants::{process_variants, VariantData},
   test_generation::{test_with_id, test_without_id},
@@ -105,10 +105,14 @@ pub fn diesel_enum(attrs: TokenStream, input: TokenStream) -> TokenStream {
 
     let is_custom_type = db_type.is_custom();
 
+    let to_from_str_conversions = to_from_str_conversions(enum_name, &variants_data);
+
+    enum_impls.extend(to_from_str_conversions);
+
     let sql_conversions = if is_custom_type {
       postgres_enum_conversions(enum_name, sql_type_path, &variants_data)
     } else {
-      sql_string_conversions(enum_name, sql_type_path, &variants_data)
+      sql_string_conversions(enum_name, sql_type_path)
     };
 
     enum_impls.extend(sql_conversions);

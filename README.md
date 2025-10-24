@@ -92,7 +92,7 @@ pub enum PokemonType {
 }
 ```
 
-## Text-based mappings 
+## Name Mapping
 
 Alternatively, we can also use a text-based mapping, that will instead map to the text value of the variant. So we would go from this:
 
@@ -113,6 +113,13 @@ pub struct Pokemon {
 ```
 
 In such a case, the mapped database type will simply be `Text` (or the specific custom type, if a custom postgres type is used).
+
+The macro will also generate two methods:
+
+- `db_name(&self) -> &'static str`, which returns the name of the database variant
+- `from_db_name(&str) -> Result<Self, String>`, which attempts to create an enum variant from a raw string
+
+This is the only mapping available for custom postgres enums.
 
 ## Using Both Mappings
 

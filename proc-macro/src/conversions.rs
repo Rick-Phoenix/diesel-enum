@@ -135,11 +135,7 @@ pub fn postgres_enum_conversions(
   }
 }
 
-pub fn sql_string_conversions(
-  enum_name: &Ident,
-  sql_type_path: &TokenStream2,
-  variants_data: &[VariantData],
-) -> TokenStream2 {
+pub fn to_from_str_conversions(enum_name: &Ident, variants_data: &[VariantData]) -> TokenStream2 {
   let mut conversion_to_str = TokenStream2::new();
   let mut conversion_from_str = TokenStream2::new();
 
@@ -148,7 +144,7 @@ pub fn sql_string_conversions(
     let variant_ident = &data.ident;
 
     conversion_to_str.extend(quote! {
-      Self::#variant_ident => #db_name.to_sql(out),
+      Self::#variant_ident => #db_name,
     });
 
     conversion_from_str.extend(quote! {
@@ -156,6 +152,27 @@ pub fn sql_string_conversions(
     });
   }
 
+  quote! {
+    impl #enum_name {
+      /// Returns the variant's corresponding name in the database source.
+      pub fn db_name(&self) -> &'static str {
+        match self {
+          #conversion_to_str
+        }
+      }
+
+      /// Returns the enum variant corresponding to a given name, if there is one.
+      pub fn from_db_name(name: &str) -> Result<Self, String> {
+        match name {
+          #conversion_from_str
+          _ => Err(format!("No matching {} variant found for `{name}`", stringify!(#enum_name)))
+        }
+      }
+    }
+  }
+}
+
+pub fn sql_string_conversions(enum_name: &Ident, sql_type_path: &TokenStream2) -> TokenStream2 {
   quote! {
     impl<DB> diesel::deserialize::FromSql<#sql_type_path, DB> for #enum_name
     where
@@ -165,10 +182,7 @@ pub fn sql_string_conversions(
       fn from_sql(bytes: DB::RawValue<'_>) -> diesel::deserialize::Result<Self> {
        let value = <String as diesel::deserialize::FromSql<#sql_type_path, DB>>::from_sql(bytes)?;
 
-        match value.as_str() {
-          #conversion_from_str
-          x => Err(Box::from(format!("Unknown `{}` variant: {x}", stringify!(#enum_name)))),
-        }
+        Self::from_db_name(&value).map_err(Box::from)
       }
     }
 
@@ -178,9 +192,7 @@ pub fn sql_string_conversions(
       str: diesel::serialize::ToSql<#sql_type_path, DB>,
     {
       fn to_sql<'b>(&'b self, out: &mut diesel::serialize::Output<'b, '_, DB>) -> diesel::serialize::Result {
-        match self {
-          #conversion_to_str
-        }
+        self.db_name().to_sql(out)
       }
     }
   }
